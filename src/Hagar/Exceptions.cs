@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Serialization;
 
 namespace Hagar
@@ -6,10 +7,10 @@ namespace Hagar
     internal static class ExceptionHelper
     {
         public static T ThrowArgumentOutOfRange<T>(string argument) => throw new ArgumentOutOfRangeException(argument);
-        public static void ThrowArgumentOutOfRange(string argument) => throw new ArgumentOutOfRangeException(argument);
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class HagarException : Exception
     {
         public HagarException()
@@ -30,6 +31,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class FieldIdNotPresentException : HagarException
     {
         public FieldIdNotPresentException() : base("Attempted to access the field id from a tag which cannot have a field id.")
@@ -42,6 +44,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class SchemaTypeInvalidException : HagarException
     {
         public SchemaTypeInvalidException() : base("Attempted to access the schema type from a tag which cannot have a schema type.")
@@ -54,6 +57,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class FieldTypeInvalidException : HagarException
     {
         public FieldTypeInvalidException() : base("Attempted to access the schema type from a tag which cannot have a schema type.")
@@ -66,6 +70,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class FieldTypeMissingException : HagarException
     {
         public FieldTypeMissingException(Type type) : base($"Attempted to deserialize an instance of abstract type {type}. No concrete type was provided.")
@@ -78,6 +83,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class ExtendedWireTypeInvalidException : HagarException
     {
         public ExtendedWireTypeInvalidException() : base(
@@ -91,6 +97,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class UnsupportedWireTypeException : HagarException
     {
         public UnsupportedWireTypeException()
@@ -107,6 +114,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class ReferenceNotFoundException : HagarException
     {
         public uint TargetReference { get; }
@@ -134,6 +142,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class UnknownReferencedTypeException : HagarException
     {
         public UnknownReferencedTypeException(uint reference) : base($"Unknown referenced type {reference}.")
@@ -155,6 +164,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class UnknownWellKnownTypeException : HagarException
     {
         public UnknownWellKnownTypeException(uint id) : base($"Unknown well-known type {id}.")
@@ -177,6 +187,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class IllegalTypeException : HagarException
     {
         public IllegalTypeException(string typeName) : base($"Type \"{typeName}\" is not allowed.")
@@ -199,6 +210,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class TypeMissingException : HagarException
     {
         public TypeMissingException() : base("Expected a type but none were encountered.")
@@ -211,6 +223,7 @@ namespace Hagar
     }
 
     [Serializable]
+    [ExcludeFromCodeCoverage]
     public class RequiredFieldMissingException : HagarException
     {
         public RequiredFieldMissingException(string message) : base(message)

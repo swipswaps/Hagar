@@ -1,4 +1,6 @@
-﻿using BenchmarkDotNet.Running;
+using System;
+using System.Threading;
+using BenchmarkDotNet.Running;
 using Benchmarks.Comparison;
 
 namespace Benchmarks
@@ -10,19 +12,25 @@ namespace Benchmarks
             if (args.Length > 0 && args[0] == "loop")
             {
                 var benchmarks = new SerializeBenchmark();
-                while (true)
+                var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                while (!cancellation.IsCancellationRequested)
                 {
                     benchmarks.Hagar();
                 }
+
+                return;
             }
 
             if (args.Length > 0 && args[0] == "structloop")
             {
                 var benchmarks = new StructSerializeBenchmark();
-                while (true)
+                var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                while (!cancellation.IsCancellationRequested)
                 {
                     benchmarks.Hagar();
                 }
+
+                return;
             }
 
             var switcher = new BenchmarkSwitcher(new[]

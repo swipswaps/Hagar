@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Reflection;
 using Hagar.Activators;
@@ -60,7 +60,7 @@ namespace Hagar
 
         private static T GetFromServices<T>(IServiceCollection services)
         {
-            foreach (var service in services )
+            foreach (var service in services)
             {
                 if (service.ServiceType == typeof(T)) return (T)service.ImplementationInstance;
             }
