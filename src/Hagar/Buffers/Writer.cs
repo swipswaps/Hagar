@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using Hagar.Session;
+using Hagar.Utilities;
 
 namespace Hagar.Buffers
 {
@@ -193,6 +194,33 @@ namespace Hagar.Buffers
                 this.currentSpan[this.bufferPos++] = (byte)((value & 0x7F) | 0x80);
             } while ((value >>= 7) != 0);
             this.currentSpan[this.bufferPos - 1] &= 0x7F; // adjust the last byte.
+        }
+
+
+        private static readonly byte[] WriteMask =
+        {
+            0, // Invalid
+            0b00000000,
+            0b10000000,
+            0b11000000,
+            0b11100000,
+            0b11110000,
+            0b11111000,
+            0b11111100,
+            0b11111110,
+            0b11111111,
+        };
+
+        public void WritePrefixVarInt(uint value)
+        {
+            var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
+            this.EnsureContiguous(numBytes + sizeof(uint));
+            var destination = this.WritableSpan;
+            var shunt = PrefixVarIntHelpers.WriteShuntForFiveByteValues(value);
+            BinaryPrimitives.WriteUInt32BigEndian(destination.Slice(shunt), value << ((4 + shunt - numBytes) * 8));
+
+            destination[0] |= PrefixVarIntHelpers.GetPrefix(numBytes);
+            this.bufferPos += numBytes;
         }
     }
 }

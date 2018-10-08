@@ -9,7 +9,7 @@
   <PropertyGroup>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
-    <SignAssembly>false</SignAssembly>
+    <!--<SignAssembly>false</SignAssembly>-->
   </PropertyGroup>
 
   <ItemGroup>

@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using Hagar.Session;
+using Hagar.Utilities;
 
 namespace Hagar.Buffers
 {
@@ -435,6 +436,67 @@ namespace Hagar.Buffers
 
             ThrowInsufficientData();
             return 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public byte PeekByte()
+        {
+            if (this.bufferPos == this.bufferSize) MoveNext();
+            return currentSpan[this.bufferPos];
+        }
+        private static readonly uint[] ReadMask =
+        {
+            0b01111111_00000000_00000000_00000000,
+            0b00111111_11111111_00000000_00000000,
+            0b00011111_11111111_11111111_00000000,
+            0b00001111_11111111_11111111_11111111,
+
+            // Shunted by one byte
+            0b11111111_11111111_11111111_11111111,
+            0b11111111_11111111_11111111_11111111,
+            0b11111111_11111111_11111111_11111111,
+            0b11111111_11111111_11111111_11111111,
+            0b11111111_11111111_11111111_11111111,
+        };
+
+        public uint ReadPrefixVarUInt32()
+        {
+            var firstByte = this.PeekByte();
+            var shunt = PrefixVarIntHelpers.ReadShuntForFiveByteValues(firstByte);
+            var numBytes = 1 + PrefixVarIntHelpers.CountLeadingOnes(firstByte);
+
+            if (this.bufferPos + shunt + 4 > this.bufferSize)
+            {
+                return this.ReadPrefixVarUInt32Slow(numBytes, shunt);
+            }
+
+            var span = this.currentSpan.Slice(this.bufferPos + shunt);
+            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask[numBytes - 1]) >> ((4 + shunt - numBytes) * 8);
+            this.bufferPos += numBytes;
+            return result;
+        }
+
+        public uint ReadPrefixVarUInt32Slow(int numBytes, int shunt)
+        {
+            Span<byte> span = stackalloc byte[4];
+            var readSpan = span.Slice(0, numBytes - shunt);
+
+            var dest = readSpan;
+            this.bufferPos += shunt;
+            while (true)
+            {
+                var writeSize = Math.Min(dest.Length, this.bufferSize - this.bufferPos);
+                this.currentSpan.Slice(this.bufferPos, writeSize).CopyTo(dest);
+                this.bufferPos += writeSize;
+                dest = dest.Slice(writeSize);
+
+                if (dest.Length == 0) break;
+
+                this.MoveNext();
+            }
+
+            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask[numBytes - 1]) >> ((4 + shunt - numBytes) * 8);
+            return result;
         }
     }
 }
