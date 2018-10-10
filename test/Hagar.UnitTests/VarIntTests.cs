@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Hagar.Buffers;
 using Hagar.Session;
@@ -85,16 +86,15 @@ namespace Hagar.UnitTests
 
                 session = new SerializerSession(null, null, null);
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
-                var read = reader.ReadVarUInt32();
+                var read = reader.ReadPrefixVarUInt32();
 
                 Assert.Equal(num, read);
-                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int) reader.Position);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int)reader.Position);
             }
-            
-            var nums = new uint[] { 0, 1, 1 << 7, 1 << 8, 1 << 15, 1 << 16, 1 << 20, 1 << 21, 1 << 24, 1 << 31 + 1234, 1234, 0xefefefef, uint.MaxValue };
-            foreach (var fastRead in new[] {false, true})
+
+            foreach (var fastRead in new[] { false, true })
             {
-                foreach (var num in nums.Concat(Enumerable.Range(1, 512).Select(n => (uint)n)))
+                foreach (var num in GetTestValues())
                 {
                     Test(num, fastRead);
                 }
@@ -104,7 +104,7 @@ namespace Hagar.UnitTests
                 var buffer = new TestSingleSegmentBufferWriter(new byte[1000]);
                 var session = new SerializerSession(null, null, null);
                 var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
-                foreach (var num in nums)
+                foreach (var num in GetTestValues())
                 {
                     writer.WriteVarInt(num);
                 }
@@ -112,14 +112,96 @@ namespace Hagar.UnitTests
                 writer.Commit();
                 session = new SerializerSession(null, null, null);
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
-                foreach (var num in nums)
+                foreach (var num in GetTestValues())
                 {
-                    var read = reader.ReadVarUInt32();
+                    var read = reader.ReadPrefixVarUInt32();
 
                     Assert.Equal(num, read);
                 }
 
                 Assert.Equal(writer.Position, reader.Position);
+            }
+
+            IEnumerable<uint> GetTestValues()
+            {
+                yield return 0;
+                uint num = 0;
+                foreach (var singleBit in new[] { false, true })
+                {
+                    for (var i = 0; i < 32; i++)
+                    {
+                        if (singleBit) num = 0;
+                        num |= (uint)1 << i;
+                        yield return num;
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        void CanRoundTripVarInt64()
+        {
+            void Test(ulong num, bool fastRead)
+            {
+                var buffer = new TestSingleSegmentBufferWriter(new byte[1000]);
+                var session = new SerializerSession(null, null, null);
+                var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
+                writer.WriteVarInt(num);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), writer.Position);
+                if (fastRead) writer.Write((long)0); // Extend the written amount so that there is always enough data to perform a fast read
+                writer.Commit();
+
+                session = new SerializerSession(null, null, null);
+                var reader = new Reader(buffer.GetReadOnlySequence(120), session);
+                var read = reader.ReadPrefixVarUInt64();
+
+                Assert.Equal(num, read);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int)reader.Position);
+            }
+            
+            foreach (var fastRead in new[] { false, true })
+            {
+                foreach (var num in GetTestValues())
+                {
+                    Test(num, fastRead);
+                }
+            }
+
+            {
+                var buffer = new TestSingleSegmentBufferWriter(new byte[1000]);
+                var session = new SerializerSession(null, null, null);
+                var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
+                foreach (var num in GetTestValues())
+                {
+                    writer.WriteVarInt(num);
+                }
+
+                writer.Commit();
+                session = new SerializerSession(null, null, null);
+                var reader = new Reader(buffer.GetReadOnlySequence(120), session);
+                foreach (var num in GetTestValues())
+                {
+                    var read = reader.ReadPrefixVarUInt64();
+
+                    Assert.Equal(num, read);
+                }
+
+                Assert.Equal(writer.Position, reader.Position);
+            }
+
+            IEnumerable<ulong> GetTestValues()
+            {
+                yield return 0;
+                ulong num = 0;
+                foreach (var singleBit in new[] { false, true })
+                {
+                    for (var i = 0; i < 64; i++)
+                    {
+                        if (singleBit) num = 0;
+                        num |= (ulong)1 << i;
+                        yield return num;
+                    }
+                }
             }
         }
     }

@@ -78,6 +78,7 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe int CountRequiredBytes(ulong x)
         {
+            // TODO: this is bad
             var a = x > 0b01111111;
             var b = x > 0b00111111_11111111;
             var c = x > 0b00011111_11111111_11111111;
@@ -104,9 +105,9 @@ namespace Hagar.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static unsafe int WriteShuntForFiveByteValues(ulong x)
+        internal static unsafe int WriteShuntForNineByteValues(ulong x)
         {
-            var d = x > 0x0FFFFFFF_FFFFFFFF;
+            var d = x > 0x00FF_FFFF_FFFF_FFFF;
             return *(byte*)&d;
         }
 

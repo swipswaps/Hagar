@@ -444,8 +444,10 @@ namespace Hagar.Buffers
             if (this.bufferPos == this.bufferSize) MoveNext();
             return currentSpan[this.bufferPos];
         }
-        private static readonly uint[] ReadMask =
+
+        private static readonly uint[] ReadMask32 =
         {
+            /* 1-based array */ 0,
             0b01111111_00000000_00000000_00000000,
             0b00111111_11111111_00000000_00000000,
             0b00011111_11111111_11111111_00000000,
@@ -457,6 +459,22 @@ namespace Hagar.Buffers
             0b11111111_11111111_11111111_11111111,
             0b11111111_11111111_11111111_11111111,
             0b11111111_11111111_11111111_11111111,
+        };
+
+        private static readonly ulong[] ReadMask64 =
+        {
+            /* 1-based array */ 0,
+            0b01111111_00000000_00000000_00000000_00000000_00000000_00000000_00000000,
+            0b00111111_11111111_00000000_00000000_00000000_00000000_00000000_00000000,
+            0b00011111_11111111_11111111_00000000_00000000_00000000_00000000_00000000,
+            0b00001111_11111111_11111111_11111111_00000000_00000000_00000000_00000000,         
+            0b00000111_11111111_11111111_11111111_11111111_00000000_00000000_00000000,
+            0b00000011_11111111_11111111_11111111_11111111_11111111_00000000_00000000,
+            0b00000001_11111111_11111111_11111111_11111111_11111111_11111111_00000000,
+            0b00000000_11111111_11111111_11111111_11111111_11111111_11111111_11111111,
+
+            // Shunted by one byte
+            0b11111111_11111111_11111111_11111111_11111111_11111111_11111111_11111111,
         };
 
         public uint ReadPrefixVarUInt32()
@@ -471,7 +489,24 @@ namespace Hagar.Buffers
             }
 
             var span = this.currentSpan.Slice(this.bufferPos + shunt);
-            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask[numBytes - 1]) >> ((4 + shunt - numBytes) * 8);
+            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask32[numBytes]) >> ((4 + shunt - numBytes) * 8);
+            this.bufferPos += numBytes;
+            return result;
+        }
+
+        public ulong ReadPrefixVarUInt64()
+        {
+            var firstByte = this.PeekByte();
+            var shunt = PrefixVarIntHelpers.ReadShuntForNineByteValues(firstByte);
+            var numBytes = 1 + PrefixVarIntHelpers.CountLeadingOnes(firstByte);
+
+            if (this.bufferPos + shunt + 8 > this.bufferSize)
+            {
+                return this.ReadPrefixVarUInt64Slow(numBytes, shunt);
+            }
+
+            var span = this.currentSpan.Slice(this.bufferPos + shunt);
+            var result = (BinaryPrimitives.ReadUInt64BigEndian(span) & ReadMask64[numBytes]) >> ((8 + shunt - numBytes) * 8);
             this.bufferPos += numBytes;
             return result;
         }
@@ -495,7 +530,30 @@ namespace Hagar.Buffers
                 this.MoveNext();
             }
 
-            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask[numBytes - 1]) >> ((4 + shunt - numBytes) * 8);
+            var result = (BinaryPrimitives.ReadUInt32BigEndian(span) & ReadMask32[numBytes]) >> ((4 + shunt - numBytes) * 8);
+            return result;
+        }
+
+        public ulong ReadPrefixVarUInt64Slow(int numBytes, int shunt)
+        {
+            Span<byte> span = stackalloc byte[8];
+            var readSpan = span.Slice(0, numBytes - shunt);
+
+            var dest = readSpan;
+            this.bufferPos += shunt;
+            while (true)
+            {
+                var writeSize = Math.Min(dest.Length, this.bufferSize - this.bufferPos);
+                this.currentSpan.Slice(this.bufferPos, writeSize).CopyTo(dest);
+                this.bufferPos += writeSize;
+                dest = dest.Slice(writeSize);
+
+                if (dest.Length == 0) break;
+
+                this.MoveNext();
+            }
+
+            var result = (BinaryPrimitives.ReadUInt64BigEndian(span) & ReadMask64[numBytes]) >> ((8 + shunt - numBytes) * 8);
             return result;
         }
     }

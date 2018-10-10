@@ -16,49 +16,18 @@ namespace Hagar.Utilities
         public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, int value) where TBufferWriter : IBufferWriter<byte> => writer.WriteVarInt(ZigZagEncode(value));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, long value) where TBufferWriter : IBufferWriter<byte> => WriteVarInt(ref writer, ZigZagEncode(value));
+        public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, long value) where TBufferWriter : IBufferWriter<byte> => writer.WriteVarInt(ZigZagEncode(value));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, byte value) where TBufferWriter : IBufferWriter<byte>
         {
-            writer.EnsureContiguous(2);
-            var count = 0;
-            var span = writer.WritableSpan;
-            do
-            {
-                span[count++] = (byte)((value & 0x7F) | 0x80);
-            } while ((value >>= 7) != 0);
-            span[count - 1] &= 0x7F; // adjust the last byte.
-            writer.AdvanceSpan(count);
+            writer.WriteVarInt((uint)value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, ushort value) where TBufferWriter : IBufferWriter<byte>
         {
-            writer.EnsureContiguous(3);
-
-            var count = 0;
-            var span = writer.WritableSpan;
-            do
-            {
-                span[count++] = (byte)((value & 0x7F) | 0x80);
-            } while ((value >>= 7) != 0);
-            span[count - 1] &= 0x7F; // adjust the last byte.
-            writer.AdvanceSpan(count);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteVarInt<TBufferWriter>(ref this Writer<TBufferWriter> writer, ulong value) where TBufferWriter : IBufferWriter<byte>
-        {
-            writer.EnsureContiguous(10);
-            var count = 0;
-            var span = writer.WritableSpan;
-            do
-            {
-                span[count++] = (byte)((value & 0x7F) | 0x80);
-            } while ((value >>= 7) != 0);
-            span[count - 1] &= 0x7F; // adjust the last byte.
-            writer.AdvanceSpan(count);
+            writer.WriteVarInt((uint)value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
