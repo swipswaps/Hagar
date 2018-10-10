@@ -1,4 +1,9 @@
+using System;
 using System.Runtime.CompilerServices;
+
+#if NETCOREAPP2_1
+using System.Runtime.Intrinsics.X86;
+#endif
 
 namespace Hagar.Utilities
 {
@@ -32,6 +37,12 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountSetBits(uint x)
         {
+#if NETCOREAPP2_1
+            if (Popcnt.IsSupported)
+            {
+                return (int)Popcnt.PopCount(x);
+            }
+#endif
             x -= ((x >> 1) & 0x55555555);
             x = (((x >> 2) & 0x33333333) + (x & 0x33333333));
             x = (((x >> 4) + x) & 0x0f0f0f0f);
@@ -43,6 +54,12 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountLeadingZeros(uint x)
         {
+#if NETCOREAPP2_1
+            if (Lzcnt.IsSupported)
+            {
+                return (int)Lzcnt.LeadingZeroCount(x);
+            }
+#endif
             x |= (x >> 1);
             x |= (x >> 2);
             x |= (x >> 4);
@@ -51,8 +68,15 @@ namespace Hagar.Utilities
             return 32 - CountSetBits(x);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int CountLeadingZeros(ulong i)
         {
+#if NETCOREAPP2_1
+            if (Lzcnt.IsSupported)
+            {
+                return (int)Lzcnt.LeadingZeroCount(i);
+            }
+#endif
             if (i == 0) return 64;
             uint n = 1;
             uint x = (uint)(i >> 32);
@@ -68,24 +92,37 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe int CountRequiredBytes(uint x)
         {
-            var a = x > 0b01111111;
-            var b = x > 0b00111111_11111111;
-            var c = x > 0b00011111_11111111_11111111;
-            var d = x > 0b00001111_11111111_11111111_11111111;
-            return 1 + *(byte*)&a + *(byte*)&b + *(byte*)&c + *(byte*)&d;
+#if NETCOREAPP2_1
+            if (Lzcnt.IsSupported)
+            {
+                return (int)((32 - Math.Max(1, Lzcnt.LeadingZeroCount(x)) + 6) / 7);
+            }
+#endif
+            if (x <= 0b01111111) return 1;
+            if (x <= 0b00111111_11111111) return 2;
+            if (x <= 0b00011111_11111111_11111111) return 3;
+            if (x <= 0b00001111_11111111_11111111_11111111) return 4;
+            return 5;
+
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe int CountRequiredBytes(ulong x)
         {
-            // TODO: this is bad
-            var a = x > 0b01111111;
-            var b = x > 0b00111111_11111111;
-            var c = x > 0b00011111_11111111_11111111;
-            var d = x > 0b00001111_11111111_11111111_11111111;
-            var e = x > 0b00000111_11111111_11111111_11111111_11111111;
-            var f = x > 0b00000011_11111111_11111111_11111111_11111111_11111111;
-            var g = x > 0b00000001_11111111_11111111_11111111_11111111_11111111_11111111;
+#if NETCOREAPP2_1
+            if (Lzcnt.IsSupported)
+            {
+                return Math.Min(9, (int)((64 - Math.Max(1, Lzcnt.LeadingZeroCount(x)) + 6) / 7));
+            }
+#endif
+            // TODO: this is very bad
+            var a = x > 0b00000000_00000000_00000000_00000000_00000000_00000000_00000000_01111111;
+            var b = x > 0b00000000_00000000_00000000_00000000_00000000_00000000_00111111_11111111;
+            var c = x > 0b00000000_00000000_00000000_00000000_00000000_00011111_11111111_11111111;
+            var d = x > 0b00000000_00000000_00000000_00000000_00001111_11111111_11111111_11111111;
+            var e = x > 0b00000000_00000000_00000000_00000111_11111111_11111111_11111111_11111111;
+            var f = x > 0b00000000_00000000_00000011_11111111_11111111_11111111_11111111_11111111;
+            var g = x > 0b00000000_00000001_11111111_11111111_11111111_11111111_11111111_11111111;
             var h = x > 0b00000000_11111111_11111111_11111111_11111111_11111111_11111111_11111111;
             return 1 + *(byte*)&a + *(byte*)&b + *(byte*)&c + *(byte*)&d + *(byte*)&e + *(byte*)&f + *(byte*)&g + *(byte*)&h;
         }

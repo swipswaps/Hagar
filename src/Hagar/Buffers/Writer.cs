@@ -189,11 +189,10 @@ namespace Hagar.Buffers
         {
             var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
             this.EnsureContiguous(numBytes + sizeof(uint));
-            var destination = this.WritableSpan;
             var shunt = PrefixVarIntHelpers.WriteShuntForFiveByteValues(value);
-            BinaryPrimitives.WriteUInt32BigEndian(destination.Slice(shunt), value << ((4 + shunt - numBytes) * 8));
+            BinaryPrimitives.WriteUInt32BigEndian(this.currentSpan.Slice(this.bufferPos + shunt), value << ((4 + shunt - numBytes) * 8));
 
-            destination[0] |= PrefixVarIntHelpers.GetPrefix(numBytes);
+            this.currentSpan[this.bufferPos] |= PrefixVarIntHelpers.GetPrefix(numBytes);
             this.bufferPos += numBytes;
         }
 
@@ -202,11 +201,10 @@ namespace Hagar.Buffers
         {
             var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
             this.EnsureContiguous(numBytes + sizeof(uint));
-            var destination = this.WritableSpan;
             var shunt = PrefixVarIntHelpers.WriteShuntForNineByteValues(value);
-            BinaryPrimitives.WriteUInt64BigEndian(destination.Slice(shunt), value << ((8 + shunt - numBytes) * 8));
+            BinaryPrimitives.WriteUInt64BigEndian(this.currentSpan.Slice(this.bufferPos + shunt), value << ((8 + shunt - numBytes) * 8));
 
-            destination[0] |= PrefixVarIntHelpers.GetPrefix(numBytes);
+            this.currentSpan[this.bufferPos] |= PrefixVarIntHelpers.GetPrefix(numBytes);
             this.bufferPos += numBytes;
         }
     }
