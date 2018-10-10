@@ -13,7 +13,20 @@ namespace Hagar.Utilities
         /// Encoding prefixes.
         /// Index is the number of bytes being encoded.
         /// </summary>
-        private static readonly byte[] Prefixes = { /* Invalid */ 0, 0b00000000, 0b10000000, 0b11000000, 0b11100000, 0b11110000, 0b11111000, 0b11111100, 0b11111110, 0b11111111, };
+        private static readonly byte[] Prefixes =
+        {
+            /* Invalid */
+            0,
+            0b00000000,
+            0b10000000,
+            0b11000000,
+            0b11100000,
+            0b11110000,
+            0b11111000,
+            0b11111100,
+            0b11111110,
+            0b11111111,
+        };
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static byte GetPrefix(int bytes)

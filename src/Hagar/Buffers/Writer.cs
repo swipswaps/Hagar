@@ -188,12 +188,34 @@ namespace Hagar.Buffers
         public void WriteVarInt(uint value)
         {
             var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
-            this.EnsureContiguous(numBytes + sizeof(uint));
-            var shunt = PrefixVarIntHelpers.WriteShuntForFiveByteValues(value);
-            BinaryPrimitives.WriteUInt32BigEndian(this.currentSpan.Slice(this.bufferPos + shunt), value << ((4 + shunt - numBytes) * 8));
+            this.EnsureContiguous(numBytes);
 
-            this.currentSpan[this.bufferPos] |= PrefixVarIntHelpers.GetPrefix(numBytes);
-            this.bufferPos += numBytes;
+            switch (numBytes)
+            {
+                case 1:
+                    this.currentSpan[this.bufferPos] = (byte)value;
+                    break;
+                case 2:
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8 | 0b10000000);
+                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    break;
+                case 3:
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 16 | 0b11000000);
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8);
+                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    break;
+                case 4:
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 24 | 0b11100000);
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 16);
+                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8);
+                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    break;
+                case 5:
+                    this.currentSpan[this.bufferPos++] = 0b11110000;
+                    BinaryPrimitives.WriteUInt32BigEndian(this.currentSpan.Slice(this.bufferPos), value);
+                    this.bufferPos += 4;
+                    break;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
