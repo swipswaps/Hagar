@@ -1,6 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
-
+using System.Runtime.InteropServices;
 #if NETCOREAPP2_1
 using System.Runtime.Intrinsics.X86;
 #endif
@@ -102,13 +102,84 @@ namespace Hagar.Utilities
             return (int)n;
         }
 
+        private static readonly byte[] RequiredBytes =
+        {
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            7,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            8,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+        };
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static unsafe int CountRequiredBytes(uint x)
         {
 #if NETCOREAPP2_1
             if (Lzcnt.IsSupported)
             {
-                return (int)((32 + 6 - Lzcnt.LeadingZeroCount(x | 1)) / 7);
+                fixed (byte* array = RequiredBytes)
+                {
+                    return array[Lzcnt.LeadingZeroCount(x)];
+                }
             }
             else
             {
@@ -129,7 +200,10 @@ namespace Hagar.Utilities
 #if NETCOREAPP2_1
             if (Lzcnt.IsSupported)
             {
-                return (int)((64 + 6 - Lzcnt.LeadingZeroCount((x | 1) & 0x7FFF_FFFF_FFFF_FFFF)) / 7);
+                fixed (byte* array = RequiredBytes)
+                {
+                    return array[Lzcnt.LeadingZeroCount(x)];
+                }
             }
             else
             {
