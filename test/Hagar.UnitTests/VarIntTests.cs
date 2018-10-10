@@ -90,7 +90,7 @@ namespace Hagar.UnitTests
                 Assert.Equal(num, read);
                 Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int) reader.Position);
             }
-
+            
             var nums = new uint[] { 0, 1, 1 << 7, 1 << 8, 1 << 15, 1 << 16, 1 << 20, 1 << 21, 1 << 24, 1 << 31 + 1234, 1234, 0xefefefef, uint.MaxValue };
             foreach (var fastRead in new[] {false, true})
             {

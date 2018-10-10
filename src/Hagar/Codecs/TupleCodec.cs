@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.WireProtocol;
@@ -591,7 +591,6 @@ namespace Hagar.Codecs
             this.item6Codec.WriteField(ref writer, 1, typeof(T6), value.Item6);
             this.item7Codec.WriteField(ref writer, 1, typeof(T7), value.Item7);
             this.item8Codec.WriteField(ref writer, 1, typeof(T8), value.Rest);
-
             
             writer.WriteEndObject();
         }
