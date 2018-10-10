@@ -188,34 +188,80 @@ namespace Hagar.Buffers
         public void WriteVarInt(uint value)
         {
             var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
-            this.EnsureContiguous(numBytes);
 
+            var span = this.currentSpan;
+            var index = this.bufferPos;
+
+            // Check that the current buffer is adequate.
+            // JIT: performing this check here should allow for bounds check elision below.
+            if (index + numBytes >= span.Length)
+            {
+                this.WriteVarIntSlow(value, numBytes);
+                return;
+            }
+            
             switch (numBytes)
             {
                 case 1:
-                    this.currentSpan[this.bufferPos] = (byte)value;
+                    span[index] = (byte)value;
                     break;
                 case 2:
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8 | 0b10000000);
-                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    span[index] = (byte)(value >> 8 | 0b10000000);
+                    span[index + 1] = (byte)value;
                     break;
                 case 3:
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 16 | 0b11000000);
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8);
-                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    span[index] = (byte)(value >> 16 | 0b11000000);
+                    span[index + 1] = (byte)(value >> 8);
+                    span[index + 2] = (byte)value;
                     break;
                 case 4:
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 24 | 0b11100000);
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 16);
-                    this.currentSpan[this.bufferPos++] = (byte)(value >> 8);
-                    this.currentSpan[this.bufferPos++] = (byte)value;
+                    BinaryPrimitives.WriteUInt32BigEndian(span, value | 0b11100000);
                     break;
                 case 5:
-                    this.currentSpan[this.bufferPos++] = 0b11110000;
-                    BinaryPrimitives.WriteUInt32BigEndian(this.currentSpan.Slice(this.bufferPos), value);
-                    this.bufferPos += 4;
+                    span[index] = 0b11110000;
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index + 1), value);
                     break;
             }
+
+            this.bufferPos += numBytes;
+        }
+
+        public void WriteVarIntSlow(uint value, int numBytes)
+        {
+            var span = this.currentSpan;
+            var index = this.bufferPos;
+
+            // The current buffer is adequate.
+            if (index + numBytes >= span.Length) this.Allocate(numBytes);
+
+            // The current buffer is inadequate, allocate another.
+            switch (numBytes)
+            {
+                case 1:
+                    span[index] = (byte)value;
+                    break;
+                case 2:
+                    span[index] = (byte)(value >> 8 | 0b10000000);
+                    span[index + 1] = (byte)value;
+                    break;
+                case 3:
+                    span[index] = (byte)(value >> 16 | 0b11000000);
+                    span[index + 1] = (byte)(value >> 8);
+                    span[index + 2] = (byte)value;
+                    break;
+                case 4:
+                    span[index] = (byte)(value >> 24 | 0b11100000);
+                    span[index + 1] = (byte)(value >> 16);
+                    span[index + 2] = (byte)(value >> 8);
+                    span[index + 3] = (byte)value;
+                    break;
+                case 5:
+                    span[index] = 0b11110000;
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index + 1), value);
+                    break;
+            }
+
+            this.bufferPos += numBytes;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
