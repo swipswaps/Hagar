@@ -19,7 +19,7 @@ namespace Hagar.Codecs
             this.codec.WriteField(ref writer, fieldIdDelta, expectedType, (TField)value);
         }
 
-        object IFieldCodec<object>.ReadValue(ref Reader reader, Field field)
+        object IFieldCodec<object>.ReadValue(ref Reader reader, in Field field)
         {
             return this.codec.ReadValue(ref reader, field);
         }

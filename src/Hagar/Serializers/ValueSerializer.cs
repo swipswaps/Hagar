@@ -28,7 +28,7 @@ namespace Hagar.Serializers
             writer.WriteEndObject();
         }
 
-        TField IFieldCodec<TField>.ReadValue(ref Reader reader, Field field)
+        TField IFieldCodec<TField>.ReadValue(ref Reader reader, in Field field)
         {
             ReferenceCodec.MarkValueField(reader.Session);
             var value = default(TField);

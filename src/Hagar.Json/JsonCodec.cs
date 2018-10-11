@@ -43,7 +43,7 @@ namespace Hagar.Json
             writer.Write(bytes);
         }
 
-        object IFieldCodec<object>.ReadValue(ref Reader reader, Field field)
+        object IFieldCodec<object>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<object>(ref reader, field);
@@ -61,7 +61,7 @@ namespace Hagar.Json
 
         public bool IsSupportedType(Type type) => type == SelfType || this.isSupportedFunc(type);
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.LengthPrefixed} is supported for JSON fields. {field}");
     }
 }

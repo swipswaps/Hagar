@@ -4,6 +4,7 @@ using Hagar.Buffers;
 using Hagar.Codecs;
 using Hagar.Serializers;
 using Hagar.Session;
+using Hagar.WireProtocol;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using Xunit;
@@ -142,7 +143,8 @@ namespace Hagar.UnitTests
                 var reader = new Reader(readResult.Buffer, readerSession);
 
                 var previousPos = reader.Position;
-                var initialHeader = reader.ReadFieldHeader();
+                Field initialHeader = default;
+                reader.ReadFieldHeader(ref initialHeader);
                 Assert.True(reader.Position > previousPos);
 
                 result = codec.ReadValue(ref reader, initialHeader);

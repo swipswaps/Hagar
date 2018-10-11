@@ -1,8 +1,9 @@
-﻿using System.Buffers;
+using System.Buffers;
 using Hagar.Buffers;
 using Hagar.Codecs;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.Serializers;
+using Hagar.WireProtocol;
 
 namespace TestApp
 {
@@ -40,9 +41,10 @@ namespace TestApp
         {
             uint fieldId = 0;
             this.baseTypeSerializer.Deserialize(ref reader, obj);
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)

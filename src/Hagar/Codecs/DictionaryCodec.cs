@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Hagar.Activators;
 using Hagar.Buffers;
@@ -48,7 +48,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        Dictionary<TKey, TValue> IFieldCodec<Dictionary<TKey, TValue>>.ReadValue(ref Reader reader, Field field)
+        Dictionary<TKey, TValue> IFieldCodec<Dictionary<TKey, TValue>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<Dictionary<TKey, TValue>>(ref reader, field);
@@ -58,9 +58,10 @@ namespace Hagar.Codecs
             Dictionary<TKey, TValue> result = null;
             IEqualityComparer<TKey> comparer = null;
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -99,7 +100,7 @@ namespace Hagar.Codecs
             return result;
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 }

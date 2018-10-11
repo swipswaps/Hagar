@@ -48,7 +48,7 @@ namespace Hagar.Serializers
             }
         }
 
-        TField IFieldCodec<TField>.ReadValue(ref Reader reader, Field field)
+        TField IFieldCodec<TField>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference) return ReferenceCodec.ReadReference<TField>(ref reader, field);
             var fieldType = field.FieldType;

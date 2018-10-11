@@ -7,6 +7,7 @@ using System.Linq;
 using Hagar.Buffers;
 using Hagar.Codecs;
 using Hagar.Session;
+using Hagar.WireProtocol;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -69,7 +70,8 @@ namespace Hagar.TestKit
             var previousPos = reader.Position;
             Assert.Equal(0, previousPos);
             var readerCodec = this.CreateCodec();
-            var readField = reader.ReadFieldHeader();
+            Field readField = default;
+            reader.ReadFieldHeader(ref readField);
 
             Assert.True(reader.Position > previousPos);
             previousPos = reader.Position;
@@ -165,7 +167,8 @@ namespace Hagar.TestKit
             
             {
                 var reader = new Reader(readResult.Buffer, this.sessionPool.GetSession());
-                var readField = reader.ReadFieldHeader();
+                Field readField = default;
+                reader.ReadFieldHeader(ref readField);
                 reader.SkipField(readField);
                 Assert.Equal(expectedLength, reader.Position);
             }
@@ -173,7 +176,8 @@ namespace Hagar.TestKit
             {
                 var codec = new SkipFieldCodec();
                 var reader = new Reader(readResult.Buffer, this.sessionPool.GetSession());
-                var readField = reader.ReadFieldHeader();
+                Field readField = default;
+                reader.ReadFieldHeader(ref readField);
                 var shouldBeNull = codec.ReadValue(ref reader, readField);
                 Assert.Null(shouldBeNull);
                 Assert.Equal(expectedLength, reader.Position);
@@ -196,7 +200,8 @@ namespace Hagar.TestKit
             pipe.Reader.TryRead(out var readResult);
             var reader = new Reader(readResult.Buffer, this.sessionPool.GetSession());
             var readerCodec = this.CreateCodec();
-            var readField = reader.ReadFieldHeader();
+            Field readField = default;
+            reader.ReadFieldHeader(ref readField);
             var deserialized = readerCodec.ReadValue(ref reader, readField);
             pipe.Reader.AdvanceTo(readResult.Buffer.End);
             pipe.Reader.Complete();

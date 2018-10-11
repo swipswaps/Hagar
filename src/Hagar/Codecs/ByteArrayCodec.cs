@@ -7,12 +7,12 @@ namespace Hagar.Codecs
 {
     public sealed class ByteArrayCodec : TypedCodecBase<byte[], ByteArrayCodec>, IFieldCodec<byte[]>
     {
-        byte[] IFieldCodec<byte[]>.ReadValue(ref Reader reader, Field field)
+        byte[] IFieldCodec<byte[]>.ReadValue(ref Reader reader, in Field field)
         {
             return ReadValue(ref reader, field);
         }
 
-        public static byte[] ReadValue(ref Reader reader, Field field)
+        public static byte[] ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<byte[]>(ref reader, field);
@@ -37,7 +37,7 @@ namespace Hagar.Codecs
             writer.Write(value);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.LengthPrefixed} is supported for byte[] fields. {field}");
     }
 }

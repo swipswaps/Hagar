@@ -109,7 +109,7 @@ namespace Hagar
             
             public void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TField value) where TBufferWriter : IBufferWriter<byte> => this.Value.WriteField(ref writer, fieldIdDelta, expectedType, value);
             
-            public TField ReadValue(ref Reader reader, Field field) => this.Value.ReadValue(ref reader, field);
+            public TField ReadValue(ref Reader reader, in Field field) => this.Value.ReadValue(ref reader, field);
 
             public IFieldCodec<TField> Value => this.codec ?? (this.codec = this.codecProvider.GetCodec<TField>());
         }

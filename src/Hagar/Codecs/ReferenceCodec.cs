@@ -37,13 +37,13 @@ namespace Hagar.Codecs
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static T ReadReference<T>(ref Reader reader, Field field)
+        public static T ReadReference<T>(ref Reader reader, in Field field)
         {
             return (T) ReadReference(ref reader, field, typeof(T));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static object ReadReference(ref Reader reader, Field field, Type expectedType)
+        public static object ReadReference(ref Reader reader, in Field field, Type expectedType)
         {
             var reference = reader.ReadVarUInt32();
             if (!reader.Session.ReferencedObjects.TryGetReferencedObject(reference, out var value))

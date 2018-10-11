@@ -72,25 +72,27 @@ namespace Hagar.Codecs
             writer.WriteVarInt(fieldId);
         }
 
-        public static Field ReadFieldHeader(ref this Reader reader)
+        public static void ReadFieldHeader(ref this Reader reader, ref Field field)
         {
-            Type type = null;
-            uint extendedId = 0;
             var tag = reader.ReadByte();
+            field.Tag = tag;
 
-            // If all of the field id delta bits are set and the field isn't an extended wiretype field, read the extended field id delta
-            if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask && (tag & (byte) WireType.Extended) != (byte) WireType.Extended)
+            if ((tag & (byte)WireType.Extended) != (byte)WireType.Extended)
             {
-                extendedId = reader.ReadVarUInt32();
-            }
+                // If all of the field id delta bits are set and the field isn't an extended wire type field, read the extended field id delta
+                var embeddedFieldId = tag & Tag.FieldIdCompleteMask;
+                if (embeddedFieldId == Tag.FieldIdCompleteMask)
+                {
+                    field.FieldIdDelta = reader.ReadVarUInt32();
+                }
+                else
+                {
+                    field.FieldIdDelta = (uint)embeddedFieldId;
+                }
 
-            // If schema type is valid, read the type.
-            if ((tag & (byte) WireType.Extended) != (byte) WireType.Extended)
-            {
-                type = reader.ReadType(reader.Session, (SchemaType) (tag & Tag.SchemaTypeMask));
+                // If schema type is valid, read the type.
+                field.FieldType = reader.ReadType(reader.Session, (SchemaType)(tag & Tag.SchemaTypeMask));
             }
-
-            return new Field(tag, extendedId, type);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -104,7 +106,7 @@ namespace Hagar.Codecs
                     var typeId = reader.ReadVarUInt32();
                     return session.WellKnownTypes.GetWellKnownType(typeId);
                 case SchemaType.Encoded:
-                    session.TypeCodec.TryRead(ref reader, out Type encoded);
+                    session.TypeCodec.TryRead(ref reader, out var encoded);
                     return encoded;
                 case SchemaType.Referenced:
                     var reference = reader.ReadVarUInt32();

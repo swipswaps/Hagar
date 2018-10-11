@@ -24,12 +24,12 @@ namespace Hagar.Codecs
             writer.Write((uint) BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
         }
 
-        float IFieldCodec<float>.ReadValue(ref Reader reader, Field field)
+        float IFieldCodec<float>.ReadValue(ref Reader reader, in Field field)
         {
             return ReadValue(ref reader, field);
         }
 
-        public static float ReadValue(ref Reader reader, Field field)
+        public static float ReadValue(ref Reader reader, in Field field)
         {
             ReferenceCodec.MarkValueField(reader.Session);
             switch (field.WireType)
@@ -83,12 +83,12 @@ namespace Hagar.Codecs
             writer.Write((ulong) BitConverter.ToInt64(BitConverter.GetBytes(value), 0));
         }
 
-        double IFieldCodec<double>.ReadValue(ref Reader reader, Field field)
+        double IFieldCodec<double>.ReadValue(ref Reader reader, in Field field)
         {
             return ReadValue(ref reader, field);
         }
 
-        public static double ReadValue(ref Reader reader, Field field)
+        public static double ReadValue(ref Reader reader, in Field field)
         {
             ReferenceCodec.MarkValueField(reader.Session);
             switch (field.WireType)
@@ -124,12 +124,12 @@ namespace Hagar.Codecs
             foreach (var part in ints) writer.Write(part);
         }
 
-        decimal IFieldCodec<decimal>.ReadValue(ref Reader reader, Field field)
+        decimal IFieldCodec<decimal>.ReadValue(ref Reader reader, in Field field)
         {
             return ReadValue(ref reader, field);
         }
 
-        public static decimal ReadValue(ref Reader reader, Field field)
+        public static decimal ReadValue(ref Reader reader, in Field field)
         {
             ReferenceCodec.MarkValueField(reader.Session);
             switch (field.WireType)

@@ -7,7 +7,7 @@ namespace Hagar.Codecs
     /// </summary>
     public class UnknownFieldMarker
     {
-        public UnknownFieldMarker(Field field, long position)
+        public UnknownFieldMarker(in Field field, long position)
         {
             this.Field = field;
             this.Position = position;

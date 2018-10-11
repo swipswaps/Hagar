@@ -47,12 +47,12 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        Type IFieldCodec<Type>.ReadValue(ref Reader reader, Field field)
+        Type IFieldCodec<Type>.ReadValue(ref Reader reader, in Field field)
         {
             return ReadValue(ref reader, field);
         }
 
-        public static Type ReadValue(ref Reader reader, Field field)
+        public static Type ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference) return ReferenceCodec.ReadReference<Type>(ref reader, field);
 
@@ -60,9 +60,10 @@ namespace Hagar.Codecs
             var schemaType = default(SchemaType);
             uint id = 0;
             Type result = null;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 ReferenceCodec.MarkValueField(reader.Session);
                 fieldId += header.FieldIdDelta;

@@ -14,7 +14,7 @@ namespace Hagar.Codecs
             writer.WriteVarInt(0);
         }
 
-        ValueTuple IFieldCodec<ValueTuple>.ReadValue(ref Reader reader, Field field)
+        ValueTuple IFieldCodec<ValueTuple>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.VarInt) ThrowUnsupportedWireTypeException(field);
 
@@ -24,7 +24,7 @@ namespace Hagar.Codecs
             return default;
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.VarInt} is supported for string fields. {field}");
     }
 
@@ -51,16 +51,17 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        ValueTuple<T> IFieldCodec<ValueTuple<T>>.ReadValue(ref Reader reader, Field field)
+        ValueTuple<T> IFieldCodec<ValueTuple<T>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
             ReferenceCodec.MarkValueField(reader.Session);
             var item1 = default(T);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -77,7 +78,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T>(item1);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -107,7 +108,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        (T1, T2) IFieldCodec<ValueTuple<T1, T2>>.ReadValue(ref Reader reader, Field field)
+        (T1, T2) IFieldCodec<ValueTuple<T1, T2>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -115,9 +116,10 @@ namespace Hagar.Codecs
             var item1 = default(T1);
             var item2 = default(T2);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -137,7 +139,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2>(item1, item2);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -173,7 +175,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        (T1, T2, T3) IFieldCodec<ValueTuple<T1, T2, T3>>.ReadValue(ref Reader reader, Field field)
+        (T1, T2, T3) IFieldCodec<ValueTuple<T1, T2, T3>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -182,9 +184,10 @@ namespace Hagar.Codecs
             var item2 = default(T2);
             var item3 = default(T3);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -207,7 +210,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3>(item1, item2, item3);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -247,7 +250,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        (T1, T2, T3, T4) IFieldCodec<ValueTuple<T1, T2, T3, T4>>.ReadValue(ref Reader reader, Field field)
+        (T1, T2, T3, T4) IFieldCodec<ValueTuple<T1, T2, T3, T4>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -257,9 +260,10 @@ namespace Hagar.Codecs
             var item3 = default(T3);
             var item4 = default(T4);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -285,7 +289,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4>(item1, item2, item3, item4);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -328,7 +332,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        (T1, T2, T3, T4, T5) IFieldCodec<ValueTuple<T1, T2, T3, T4, T5>>.ReadValue(ref Reader reader, Field field)
+        (T1, T2, T3, T4, T5) IFieldCodec<ValueTuple<T1, T2, T3, T4, T5>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -339,9 +343,10 @@ namespace Hagar.Codecs
             var item4 = default(T4);
             var item5 = default(T5);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -370,7 +375,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5>(item1, item2, item3, item4, item5);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -418,7 +423,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        (T1, T2, T3, T4, T5, T6) IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6>>.ReadValue(ref Reader reader, Field field)
+        (T1, T2, T3, T4, T5, T6) IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6>>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -430,9 +435,10 @@ namespace Hagar.Codecs
             var item5 = default(T5);
             var item6 = default(T6);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -464,7 +470,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6>(item1, item2, item3, item4, item5, item6);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -518,7 +524,7 @@ namespace Hagar.Codecs
 
         (T1, T2, T3, T4, T5, T6, T7) IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>.ReadValue(
             ref Reader reader,
-            Field field)
+            in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -531,9 +537,10 @@ namespace Hagar.Codecs
             var item6 = default(T6);
             var item7 = default(T7);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -568,7 +575,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6, T7>(item1, item2, item3, item4, item5, item6, item7);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -625,7 +632,7 @@ namespace Hagar.Codecs
         }
 
         ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8> IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8>>.ReadValue(ref Reader reader,
-            Field field)
+            in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -639,9 +646,10 @@ namespace Hagar.Codecs
             var item7 = default(T7);
             var item8 = default(T8);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -679,7 +687,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8>(item1, item2, item3, item4, item5, item6, item7, item8);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 }
