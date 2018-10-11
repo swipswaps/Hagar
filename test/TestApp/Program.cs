@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO.Pipelines;
 using System.Runtime.Serialization;
 using System.Text;
@@ -9,6 +9,7 @@ using Hagar.Buffers;
 using Hagar.Codecs;
 using Hagar.ISerializable;
 using Hagar.Json;
+using Hagar.WireProtocol;
 using Microsoft.Extensions.DependencyInjection;
 using MyPocos;
 using Newtonsoft.Json;
@@ -67,7 +68,8 @@ namespace TestApp
             using (var readerSession = sessionPool.GetSession())
             {
                 var reader = new Reader(readResult.Buffer, readerSession);
-                var initialHeader = reader.ReadFieldHeader();
+                Field initialHeader = default;
+                reader.ReadFieldHeader(ref initialHeader);
                 var result = codec.ReadValue(ref reader, initialHeader);
                 Console.WriteLine(result);
             }
@@ -268,7 +270,8 @@ namespace TestApp
             pipe.Writer.Complete();
             pipe.Reader.TryRead(out var readResult);
             var reader = new Reader(readResult.Buffer, getSession());
-            var initialHeader = reader.ReadFieldHeader();
+            Field initialHeader = default;
+            reader.ReadFieldHeader(ref initialHeader);
             //Console.WriteLine(initialHeader);
             var actual = serializer.ReadValue(ref reader, initialHeader);
             pipe.Reader.AdvanceTo(readResult.Buffer.End);
@@ -312,7 +315,8 @@ namespace TestApp
             pipe.Writer.Complete();
             pipe.Reader.TryRead(out var readResult);
             var reader = new Reader(readResult.Buffer, getSession());
-            var initialHeader = reader.ReadFieldHeader();
+            Field initialHeader = default;
+            reader.ReadFieldHeader(ref initialHeader);
             var skipCodec = new SkipFieldCodec();
             skipCodec.ReadValue(ref reader, initialHeader);
             pipe.Reader.AdvanceTo(readResult.Buffer.End);

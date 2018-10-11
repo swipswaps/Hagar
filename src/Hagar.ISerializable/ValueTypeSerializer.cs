@@ -3,6 +3,7 @@ using System.Runtime.Serialization;
 using System.Security;
 using Hagar.Buffers;
 using Hagar.Codecs;
+using Hagar.WireProtocol;
 
 namespace Hagar.ISerializable
 {
@@ -69,9 +70,10 @@ namespace Hagar.ISerializable
             this.callbacks.OnDeserializing?.Invoke(ref result, this.streamingContext);
 
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 if (fieldId == 1)

@@ -72,31 +72,27 @@ namespace Hagar.Codecs
             writer.WriteVarUInt32(fieldId);
         }
 
-        public static Field ReadFieldHeader(ref this Reader reader)
+        public static void ReadFieldHeader(ref this Reader reader, ref Field field)
         {
             var tag = reader.ReadByte();
+            field.Tag = tag;
 
-            if (tag < (byte)WireType.Extended)
+            if ((tag & (byte)WireType.Extended) != (byte)WireType.Extended)
             {
-                uint fieldIdDelta;
-
                 // If all of the field id delta bits are set and the field isn't an extended wire type field, read the extended field id delta
-                if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask)
+                var embeddedFieldId = (tag & Tag.FieldIdCompleteMask);
+                if (embeddedFieldId == Tag.FieldIdCompleteMask)
                 {
-                    fieldIdDelta = reader.ReadVarUInt32();
+                    field.FieldIdDelta = reader.ReadVarUInt32();
                 }
                 else
                 {
-                    fieldIdDelta = 0;
+                    field.FieldIdDelta = (uint)embeddedFieldId;
                 }
 
                 // If schema type is valid, read the type.
-                var type = reader.ReadType(reader.Session, (SchemaType)(tag & Tag.SchemaTypeMask));
-
-                return new Field(tag, fieldIdDelta, type);
+                field.FieldType = reader.ReadType(reader.Session, (SchemaType)(tag & Tag.SchemaTypeMask));
             }
-
-            return new Field(tag);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -110,7 +106,7 @@ namespace Hagar.Codecs
                     var typeId = reader.ReadVarUInt32();
                     return session.WellKnownTypes.GetWellKnownType(typeId);
                 case SchemaType.Encoded:
-                    session.TypeCodec.TryRead(ref reader, out Type encoded);
+                    session.TypeCodec.TryRead(ref reader, out var encoded);
                     return encoded;
                 case SchemaType.Referenced:
                     var reference = reader.ReadVarUInt32();

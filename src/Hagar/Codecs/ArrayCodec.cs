@@ -45,9 +45,10 @@ namespace Hagar.Codecs
             uint fieldId = 0;
             var length = 0;
             var index = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)

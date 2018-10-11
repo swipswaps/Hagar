@@ -60,9 +60,10 @@ namespace Hagar.Codecs
             var schemaType = default(SchemaType);
             uint id = 0;
             Type result = null;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 ReferenceCodec.MarkValueField(reader.Session);
                 fieldId += header.FieldIdDelta;

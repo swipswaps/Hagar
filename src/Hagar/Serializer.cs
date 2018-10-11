@@ -4,6 +4,7 @@ using Hagar.Buffers;
 using Hagar.Codecs;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.Serializers;
+using Hagar.WireProtocol;
 
 namespace Hagar
 {
@@ -33,8 +34,9 @@ namespace Hagar
 
         public T Deserialize(ref Reader reader)
         {
-            var field = reader.ReadFieldHeader();
-            return this.codec.ReadValue(ref reader, field);
+            Field header = default;
+            reader.ReadFieldHeader(ref header);
+            return this.codec.ReadValue(ref reader, header);
         }
     }
 }

@@ -31,9 +31,10 @@ namespace Hagar.ISerializable
             ReferenceCodec.MarkValueField(reader.Session);
             var result = new SerializationEntrySurrogate();
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
