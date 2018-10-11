@@ -74,23 +74,29 @@ namespace Hagar.Codecs
 
         public static Field ReadFieldHeader(ref this Reader reader)
         {
-            Type type = null;
-            uint extendedId = 0;
             var tag = reader.ReadByte();
 
-            // If all of the field id delta bits are set and the field isn't an extended wiretype field, read the extended field id delta
-            if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask && (tag & (byte) WireType.Extended) != (byte) WireType.Extended)
+            if (tag < (byte)WireType.Extended)
             {
-                extendedId = reader.ReadVarUInt32();
+                uint fieldIdDelta;
+
+                // If all of the field id delta bits are set and the field isn't an extended wire type field, read the extended field id delta
+                if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask)
+                {
+                    fieldIdDelta = reader.ReadVarUInt32();
+                }
+                else
+                {
+                    fieldIdDelta = 0;
+                }
+
+                // If schema type is valid, read the type.
+                var type = reader.ReadType(reader.Session, (SchemaType)(tag & Tag.SchemaTypeMask));
+
+                return new Field(tag, fieldIdDelta, type);
             }
 
-            // If schema type is valid, read the type.
-            if ((tag & (byte) WireType.Extended) != (byte) WireType.Extended)
-            {
-                type = reader.ReadType(reader.Session, (SchemaType) (tag & Tag.SchemaTypeMask));
-            }
-
-            return new Field(tag, extendedId, type);
+            return new Field(tag);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
