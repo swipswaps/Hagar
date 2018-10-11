@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.WireProtocol;
@@ -11,7 +11,7 @@ namespace Hagar.Codecs
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, value.GetType(), WireType.VarInt);
-            writer.WriteVarInt(0);
+            writer.WriteVarUInt64(0);
         }
 
         ValueTuple IFieldCodec<ValueTuple>.ReadValue(ref Reader reader, Field field)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using Hagar.Buffers;
 using Hagar.WireProtocol;
@@ -33,7 +33,7 @@ namespace Hagar.Codecs
             if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
 
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(byte[]), WireType.LengthPrefixed);
-            writer.WriteVarInt((uint) value.Length);
+            writer.WriteVarUInt32((uint) value.Length);
             writer.Write(value);
         }
 

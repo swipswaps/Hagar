@@ -103,7 +103,7 @@ namespace Hagar.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static unsafe int CountRequiredBytes(uint x)
+        internal static int CountRequiredBytes32(uint x)
         {
 #if NETCOREAPP2_1
             if (Lzcnt.IsSupported)
@@ -124,12 +124,12 @@ namespace Hagar.Utilities
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static unsafe int CountRequiredBytes(ulong x)
+        internal static int CountRequiredBytes64(ulong x)
         {
 #if NETCOREAPP2_1
             if (Lzcnt.IsSupported)
             {
-                return (int)((64 + 6 - Lzcnt.LeadingZeroCount((x | 1) & 0x7FFF_FFFF_FFFF_FFFF)) / 7);
+                return (int)((64 + 6 - Lzcnt.LeadingZeroCount((x | 1 | (x >> 1)) & 0x7FFF_FFFF_FFFF_FFFF)) / 7);
             }
             else
             {

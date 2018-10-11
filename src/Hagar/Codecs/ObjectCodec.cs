@@ -39,7 +39,7 @@ namespace Hagar.Codecs
             {
                 if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
                 writer.WriteFieldHeader(fieldIdDelta, expectedType, ObjectType, WireType.LengthPrefixed);
-                writer.WriteVarInt((uint) 0);
+                writer.WriteVarUInt32((uint) 0);
             }
 
             var specificSerializer = writer.Session.CodecProvider.GetCodec(fieldType);

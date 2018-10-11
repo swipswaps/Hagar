@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using Hagar.Buffers;
@@ -27,24 +27,24 @@ namespace Hagar.Codecs
             if (actualType == expectedType)
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Expected));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarUInt32(fieldId);
             }
             else if (writer.Session.WellKnownTypes.TryGetWellKnownTypeId(actualType, out var typeOrReferenceId))
             {
                 writer.Write((byte) (tag | (byte) SchemaType.WellKnown));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
-                writer.WriteVarInt(typeOrReferenceId);
+                if (hasExtendedFieldId) writer.WriteVarUInt32(fieldId);
+                writer.WriteVarUInt32(typeOrReferenceId);
             }
             else if (writer.Session.ReferencedTypes.TryGetTypeReference(actualType, out typeOrReferenceId))
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Referenced));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
-                writer.WriteVarInt(typeOrReferenceId);
+                if (hasExtendedFieldId) writer.WriteVarUInt32(fieldId);
+                writer.WriteVarUInt32(typeOrReferenceId);
             }
             else
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Encoded));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarUInt32(fieldId);
                 writer.Session.TypeCodec.Write(ref writer, actualType);
             }
         }
@@ -69,7 +69,7 @@ namespace Hagar.Codecs
             where TBufferWriter : IBufferWriter<byte>
         {
             writer.Write((byte) ((byte) wireType | Tag.FieldIdCompleteMask));
-            writer.WriteVarInt(fieldId);
+            writer.WriteVarUInt32(fieldId);
         }
 
         public static Field ReadFieldHeader(ref this Reader reader)

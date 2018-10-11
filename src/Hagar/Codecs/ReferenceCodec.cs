@@ -32,7 +32,7 @@ namespace Hagar.Codecs
             }
 
             writer.WriteFieldHeader(fieldId, expectedType, value?.GetType(), WireType.Reference);
-            writer.WriteVarInt(reference);
+            writer.WriteVarUInt32(reference);
             return true;
         }
 

@@ -185,9 +185,9 @@ namespace Hagar.Buffers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteVarInt(uint value)
+        public void WriteVarUInt32(uint value)
         {
-            var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
+            var numBytes = PrefixVarIntHelpers.CountRequiredBytes32(value);
 
             var span = this.currentSpan;
             var index = this.bufferPos;
@@ -196,7 +196,7 @@ namespace Hagar.Buffers
             // JIT: performing this check here should allow for bounds check elision below.
             if (index + numBytes >= span.Length)
             {
-                this.WriteVarIntSlow(value, numBytes);
+                this.WriteVarUInt32Slow(value, numBytes);
                 return;
             }
             
@@ -226,18 +226,17 @@ namespace Hagar.Buffers
             this.bufferPos += numBytes;
         }
 
-        public void WriteVarIntSlow(uint value, int numBytes)
+        private void WriteVarUInt32Slow(uint value, int numBytes)
         {
-            var span = this.currentSpan;
-            var index = this.bufferPos;
-
             // Check that current buffer is adequate.
-            if (index + numBytes >= span.Length)
+            if (this.bufferPos + numBytes >= this.currentSpan.Length)
             {
                 // The current buffer is inadequate, allocate another.
                 this.Allocate(numBytes);
             }
 
+            var span = this.currentSpan;
+            var index = this.bufferPos;
             switch (numBytes)
             {
                 case 1:
@@ -265,14 +264,138 @@ namespace Hagar.Buffers
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteVarInt(ulong value)
+        public void WriteVarUInt64(ulong value)
         {
-            var numBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
-            this.EnsureContiguous(numBytes + sizeof(uint));
-            var shunt = PrefixVarIntHelpers.WriteShuntForNineByteValues(value);
-            BinaryPrimitives.WriteUInt64BigEndian(this.currentSpan.Slice(this.bufferPos + shunt), value << ((8 + shunt - numBytes) * 8));
+            var numBytes = PrefixVarIntHelpers.CountRequiredBytes64(value);
 
-            this.currentSpan[this.bufferPos] |= PrefixVarIntHelpers.GetPrefix(numBytes);
+            var span = this.currentSpan;
+            var index = this.bufferPos;
+
+            // Check that the current buffer is adequate.
+            // JIT: performing this check here should allow for bounds check elision below.
+            if (index + numBytes >= span.Length)
+            {
+                this.WriteVarUInt64Slow(value, numBytes);
+                return;
+            }
+
+            switch (numBytes)
+            {
+                case 1:
+                    span[index] = (byte)value;
+                    break;
+                case 2:
+                    span[index] = (byte)(value >> 8 | 0b10000000);
+                    span[index + 1] = (byte)value;
+                    break;
+                case 3:
+                    span[index] = (byte)(value >> 16 | 0b11000000);
+                    span[index + 1] = (byte)(value >> 8);
+                    span[index + 2] = (byte)value;
+                    break;
+                case 4:
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index), (uint)value | 0b11100000_00000000_00000000_00000000);
+                    break;
+                case 5:
+                    // TODO: optimize
+                    span[index] = (byte)(value >> 32 | 0b11110000);
+                    span[index + 1] = (byte)(value >> 24);
+                    span[index + 2] = (byte)(value >> 16);
+                    span[index + 3] = (byte)(value >> 8);
+                    span[index + 4] = (byte)value;
+                    break;
+                case 6:
+                    span[index] = (byte)(value >> 40 | 0b11111000);
+                    span[index + 1] = (byte)(value >> 32);
+                    span[index + 2] = (byte)(value >> 24);
+                    span[index + 3] = (byte)(value >> 16);
+                    span[index + 4] = (byte)(value >> 8);
+                    span[index + 5] = (byte)value;
+                    break;
+                case 7:
+                    span[index] = (byte)(value >> 48 | 0b11111100);
+                    span[index + 1] = (byte)(value >> 40);
+                    span[index + 2] = (byte)(value >> 32);
+                    span[index + 3] = (byte)(value >> 24);
+                    span[index + 4] = (byte)(value >> 16);
+                    span[index + 5] = (byte)(value >> 8);
+                    span[index + 6] = (byte)value;
+                    break;
+                case 8:
+                    BinaryPrimitives.WriteUInt64BigEndian(span.Slice(index), value | 0b11111110_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+                    break;
+                case 9:
+                    span[index] = 0b11111111;
+                    BinaryPrimitives.WriteUInt64BigEndian(span.Slice(index + 1), value);
+                    break;
+            }
+
+            this.bufferPos += numBytes;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void WriteVarUInt64Slow(ulong value, int numBytes)
+        {
+            // Check that current buffer is adequate.
+            if (this.bufferPos + numBytes >= this.currentSpan.Length)
+            {
+                // The current buffer is inadequate, allocate another.
+                this.Allocate(numBytes);
+            }
+
+            var span = this.currentSpan;
+            var index = this.bufferPos;
+            switch (numBytes)
+            {
+                case 1:
+                    span[index] = (byte)value;
+                    break;
+                case 2:
+                    span[index] = (byte)(value >> 8 | 0b10000000);
+                    span[index + 1] = (byte)value;
+                    break;
+                case 3:
+                    span[index] = (byte)(value >> 16 | 0b11000000);
+                    span[index + 1] = (byte)(value >> 8);
+                    span[index + 2] = (byte)value;
+                    break;
+                case 4:
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index), (uint)value | 0b11100000_00000000_00000000_00000000);
+                    break;
+                case 5:
+                    // TODO: optimize
+                    span[index] = (byte)(value >> 32 | 0b11110000);
+                    span[index + 1] = (byte)(value >> 24);
+                    span[index + 2] = (byte)(value >> 16);
+                    span[index + 3] = (byte)(value >> 8);
+                    span[index + 4] = (byte)value;
+                    break;
+                case 6:
+                    span[index] = (byte)(value >> 40 | 0b11111000);
+                    span[index + 1] = (byte)(value >> 32);
+                    span[index + 2] = (byte)(value >> 24);
+                    span[index + 3] = (byte)(value >> 16);
+                    span[index + 4] = (byte)(value >> 8);
+                    span[index + 5] = (byte)value;
+                    break;
+                case 7:
+                    span[index] = (byte)(value >> 48 | 0b11111100);
+                    span[index + 1] = (byte)(value >> 40);
+                    span[index + 2] = (byte)(value >> 32);
+                    span[index + 3] = (byte)(value >> 24);
+                    span[index + 4] = (byte)(value >> 16);
+                    span[index + 5] = (byte)(value >> 8);
+                    span[index + 6] = (byte)value;
+                    break;
+                case 8:
+                    BinaryPrimitives.WriteUInt64BigEndian(span.Slice(index), value | 0b11111110_00000000_00000000_00000000_00000000_00000000_00000000_00000000);
+                    break;
+                case 9:
+                    span[index] = 0b11111111;
+                    BinaryPrimitives.WriteUInt64BigEndian(span.Slice(index + 1), value);
+                    break;
+            }
+
             this.bufferPos += numBytes;
         }
     }

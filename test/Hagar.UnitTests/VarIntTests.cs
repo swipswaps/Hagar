@@ -21,7 +21,7 @@ namespace Hagar.UnitTests
                 // value for the given number of bytes
                 for (var shift = steps[expected - 1]; shift < steps[expected]; shift++)
                 {
-                    var requiredBytes = PrefixVarIntHelpers.CountRequiredBytes((uint)1 << shift);
+                    var requiredBytes = PrefixVarIntHelpers.CountRequiredBytes32((uint)1 << shift);
                     Assert.Equal(expected, requiredBytes);
                 }
 
@@ -31,7 +31,7 @@ namespace Hagar.UnitTests
                 for (var shift = steps[expected - 1]; shift < steps[expected]; shift++)
                 {
                     value |= (uint)1 << shift;
-                    var requiredBytes = PrefixVarIntHelpers.CountRequiredBytes(value);
+                    var requiredBytes = PrefixVarIntHelpers.CountRequiredBytes32(value);
                     Assert.Equal(expected, requiredBytes);
                 }
             }
@@ -79,17 +79,17 @@ namespace Hagar.UnitTests
                 var buffer = new TestSingleSegmentBufferWriter(new byte[1000]);
                 var session = new SerializerSession(null, null, null);
                 var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
-                writer.WriteVarInt(num);
-                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), writer.Position);
+                writer.WriteVarUInt32(num);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes32(num), writer.Position);
                 if (fastRead) writer.Write(0); // Extend the written amount so that there is always enough data to perform a fast read
                 writer.Commit();
 
                 session = new SerializerSession(null, null, null);
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
-                var read = reader.ReadPrefixVarUInt32();
+                var read = reader.ReadVarUInt32();
 
                 Assert.Equal(num, read);
-                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int)reader.Position);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes32(num), (int)reader.Position);
             }
 
             foreach (var fastRead in new[] { false, true })
@@ -106,7 +106,7 @@ namespace Hagar.UnitTests
                 var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
                 foreach (var num in GetTestValues())
                 {
-                    writer.WriteVarInt(num);
+                    writer.WriteVarUInt32(num);
                 }
 
                 writer.Commit();
@@ -114,7 +114,7 @@ namespace Hagar.UnitTests
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
                 foreach (var num in GetTestValues())
                 {
-                    var read = reader.ReadPrefixVarUInt32();
+                    var read = reader.ReadVarUInt32();
 
                     Assert.Equal(num, read);
                 }
@@ -146,17 +146,17 @@ namespace Hagar.UnitTests
                 var buffer = new TestSingleSegmentBufferWriter(new byte[1000]);
                 var session = new SerializerSession(null, null, null);
                 var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
-                writer.WriteVarInt(num);
-                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), writer.Position);
+                writer.WriteVarUInt64(num);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes64(num), writer.Position);
                 if (fastRead) writer.Write((long)0); // Extend the written amount so that there is always enough data to perform a fast read
                 writer.Commit();
 
                 session = new SerializerSession(null, null, null);
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
-                var read = reader.ReadPrefixVarUInt64();
+                var read = reader.ReadVarUInt64();
 
                 Assert.Equal(num, read);
-                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes(num), (int)reader.Position);
+                Assert.Equal(PrefixVarIntHelpers.CountRequiredBytes64(num), (int)reader.Position);
             }
             
             foreach (var fastRead in new[] { false, true })
@@ -173,7 +173,7 @@ namespace Hagar.UnitTests
                 var writer = new Writer<TestSingleSegmentBufferWriter>(buffer, session);
                 foreach (var num in GetTestValues())
                 {
-                    writer.WriteVarInt(num);
+                    writer.WriteVarUInt64(num);
                 }
 
                 writer.Commit();
@@ -181,7 +181,7 @@ namespace Hagar.UnitTests
                 var reader = new Reader(buffer.GetReadOnlySequence(120), session);
                 foreach (var num in GetTestValues())
                 {
-                    var read = reader.ReadPrefixVarUInt64();
+                    var read = reader.ReadVarUInt64();
 
                     Assert.Equal(num, read);
                 }

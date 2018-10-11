@@ -52,7 +52,7 @@ namespace Hagar.Codecs
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(string), WireType.LengthPrefixed);
             // TODO: use Span<byte>
             var bytes = Encoding.UTF8.GetBytes(value);
-            writer.WriteVarInt((uint) bytes.Length);
+            writer.WriteVarUInt32((uint) bytes.Length);
             writer.Write(bytes);
         }
 

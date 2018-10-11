@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -23,7 +23,7 @@ namespace Hagar.TypeSystem
         {
             var key = this.typeCache.GetOrAdd(type, GetTypeKey);
             writer.Write(key.HashCode);
-            writer.WriteVarInt((uint)key.TypeName.Length);
+            writer.WriteVarUInt32((uint)key.TypeName.Length);
             writer.Write(key.TypeName);
         }
 
