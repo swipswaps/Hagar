@@ -215,7 +215,7 @@ namespace Hagar.Buffers
                     span[index + 2] = (byte)value;
                     break;
                 case 4:
-                    BinaryPrimitives.WriteUInt32BigEndian(span, value | 0b11100000);
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index), value | 0b11100000_00000000_00000000_00000000);
                     break;
                 case 5:
                     span[index] = 0b11110000;
@@ -231,10 +231,13 @@ namespace Hagar.Buffers
             var span = this.currentSpan;
             var index = this.bufferPos;
 
-            // The current buffer is adequate.
-            if (index + numBytes >= span.Length) this.Allocate(numBytes);
+            // Check that current buffer is adequate.
+            if (index + numBytes >= span.Length)
+            {
+                // The current buffer is inadequate, allocate another.
+                this.Allocate(numBytes);
+            }
 
-            // The current buffer is inadequate, allocate another.
             switch (numBytes)
             {
                 case 1:
@@ -250,10 +253,7 @@ namespace Hagar.Buffers
                     span[index + 2] = (byte)value;
                     break;
                 case 4:
-                    span[index] = (byte)(value >> 24 | 0b11100000);
-                    span[index + 1] = (byte)(value >> 16);
-                    span[index + 2] = (byte)(value >> 8);
-                    span[index + 3] = (byte)value;
+                    BinaryPrimitives.WriteUInt32BigEndian(span.Slice(index), value | 0b11100000_00000000_00000000_00000000);
                     break;
                 case 5:
                     span[index] = 0b11110000;
