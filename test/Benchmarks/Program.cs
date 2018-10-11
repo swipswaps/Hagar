@@ -33,6 +33,18 @@ namespace Benchmarks
                 return;
             }
 
+            if (args.Length > 0 && args[0] == "destructloop")
+            {
+                var benchmarks = new StructDeserializeBenchmark();
+                var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                while (!cancellation.IsCancellationRequested)
+                {
+                    benchmarks.Hagar();
+                }
+
+                return;
+            }
+
             var switcher = new BenchmarkSwitcher(new[]
             {
                 typeof(DeserializeBenchmark),

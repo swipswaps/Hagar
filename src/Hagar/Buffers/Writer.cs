@@ -69,6 +69,7 @@ namespace Hagar.Buffers
 #endif
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public void Allocate(int length)
         {
             // Commit the bytes which have been written.
