@@ -43,7 +43,7 @@ namespace Hagar.Json
             writer.Write(bytes);
         }
 
-        object IFieldCodec<object>.ReadValue(ref Reader reader, Field field)
+        object IFieldCodec<object>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<object>(ref reader, field);

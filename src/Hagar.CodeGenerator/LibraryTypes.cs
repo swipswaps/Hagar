@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 // ReSharper disable InconsistentNaming
@@ -19,6 +19,7 @@ namespace Hagar.CodeGenerator
                 Writer = Type("Hagar.Buffers.Writer`1"),
                 IBufferWriter = Type("System.Buffers.IBufferWriter`1"),
                 Reader = Type("Hagar.Buffers.Reader"),
+                Field = Type("Hagar.WireProtocol.Field"),
                 SerializerSession = Type("Hagar.Session.SerializerSession"),
                 Object = compilation.GetSpecialType(SpecialType.System_Object),
                 Type = Type("System.Type"),
@@ -73,6 +74,8 @@ namespace Hagar.CodeGenerator
         public INamedTypeSymbol Reader { get; private set; }
 
         public INamedTypeSymbol Writer { get; private set; }
+
+        public INamedTypeSymbol Field { get; private set; }
 
         public INamedTypeSymbol IBufferWriter { get; private set; }
 

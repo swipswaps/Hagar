@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.Serializers;
@@ -65,7 +65,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        object IFieldCodec<object>.ReadValue(ref Reader reader, Field field)
+        object IFieldCodec<object>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<T[]>(ref reader, field);
@@ -77,9 +77,10 @@ namespace Hagar.Codecs
             int[] lengths = null;
             int[] indices = null;
             var rank = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -125,7 +126,7 @@ namespace Hagar.Codecs
         private static object ThrowIndexOutOfRangeException(int[] lengths) => throw new IndexOutOfRangeException(
             $"Encountered too many elements in array of type {typeof(T)} with declared lengths {string.Join(", ", lengths)}.");
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported for string fields. {field}");
 
         private static T ThrowLengthsFieldMissing() => throw new RequiredFieldMissingException("Serialized array is missing its lengths field.");

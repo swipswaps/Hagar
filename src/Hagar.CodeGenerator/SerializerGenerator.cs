@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Hagar.CodeGenerator.SyntaxGeneration;
@@ -297,6 +297,14 @@ namespace Hagar.CodeGenerator
                             })))));
             }
 
+            // C#: Field header = default(Field);
+            body.Add(
+                LocalDeclarationStatement(
+                    VariableDeclaration(
+                        libraryTypes.Field.ToNameSyntax(),
+                        SingletonSeparatedList(
+                            VariableDeclarator(headerVar.Identifier).WithInitializer(EqualsValueClause(DefaultExpression(libraryTypes.Field.ToNameSyntax())))))));
+
             body.Add(WhileStatement(LiteralExpression(SyntaxKind.TrueLiteralExpression), Block(GetDeserializerLoopBody())));
 
             var parameters = new[]
@@ -320,14 +328,9 @@ namespace Hagar.CodeGenerator
             {
                 return new List<StatementSyntax>
                 {
-                    // C#: var header = reader.ReadFieldHeader();
-                    LocalDeclarationStatement(
-                        VariableDeclaration(
-                            IdentifierName("var"),
-                            SingletonSeparatedList(
-                                VariableDeclarator(headerVar.Identifier)
-                                    .WithInitializer(EqualsValueClause(InvocationExpression(readerParam.Member("ReadFieldHeader"),
-                                        ArgumentList())))))),
+                    // C#: reader.ReadFieldHeader(ref header);
+                    ExpressionStatement(InvocationExpression(readerParam.Member("ReadFieldHeader"),
+                                        ArgumentList(SingletonSeparatedList(Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)))))),
 
                     // C#: if (header.IsEndBaseOrEndObject) break;
                     IfStatement(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, headerVar, IdentifierName("IsEndBaseOrEndObject")), BreakStatement()),
@@ -376,7 +379,7 @@ namespace Hagar.CodeGenerator
 
                     ExpressionSyntax readValueExpression = InvocationExpression(
                         codecExpression.Member("ReadValue"),
-                        ArgumentList(SeparatedList(new[] {Argument(readerParam).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)), Argument(headerVar)})));
+                        ArgumentList(SeparatedList(new[] {Argument(readerParam).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)), Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.InKeyword))})));
                     if (!codec.UnderlyingType.Equals(member.Type))
                     {
                         // If the member type type differs from the codec type (eg because the member is an array), cast the result.

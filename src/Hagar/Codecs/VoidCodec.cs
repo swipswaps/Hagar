@@ -14,7 +14,7 @@ namespace Hagar.Codecs
             }
         }
 
-        object IFieldCodec<object>.ReadValue(ref Reader reader, Field field)
+        object IFieldCodec<object>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.Reference)
             {

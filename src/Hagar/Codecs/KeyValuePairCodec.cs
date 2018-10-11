@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
@@ -31,7 +31,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        public KeyValuePair<TKey, TValue> ReadValue(ref Reader reader, Field field)
+        public KeyValuePair<TKey, TValue> ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
@@ -39,9 +39,10 @@ namespace Hagar.Codecs
             var key = default(TKey);
             var value = default(TValue);
             uint fieldId = 0;
+            Field header = default;
             while (true)
             {
-                var header = reader.ReadFieldHeader();
+                reader.ReadFieldHeader(ref header);
                 if (header.IsEndBaseOrEndObject) break;
                 fieldId += header.FieldIdDelta;
                 switch (fieldId)
@@ -61,7 +62,7 @@ namespace Hagar.Codecs
             return new KeyValuePair<TKey, TValue>(key, value);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 }

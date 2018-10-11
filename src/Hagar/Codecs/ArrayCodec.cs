@@ -34,7 +34,7 @@ namespace Hagar.Codecs
             writer.WriteEndObject();
         }
 
-        T[] IFieldCodec<T[]>.ReadValue(ref Reader reader, Field field)
+        T[] IFieldCodec<T[]>.ReadValue(ref Reader reader, in Field field)
         {
             if (field.WireType == WireType.Reference)
                 return ReferenceCodec.ReadReference<T[]>(ref reader, field);
@@ -73,7 +73,7 @@ namespace Hagar.Codecs
             return result;
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported for string fields. {field}");
 
         private static T[] ThrowIndexOutOfRangeException(int length) => throw new IndexOutOfRangeException(

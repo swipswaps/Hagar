@@ -80,7 +80,7 @@ namespace Hagar.Codecs
             if ((tag & (byte)WireType.Extended) != (byte)WireType.Extended)
             {
                 // If all of the field id delta bits are set and the field isn't an extended wire type field, read the extended field id delta
-                var embeddedFieldId = (tag & Tag.FieldIdCompleteMask);
+                var embeddedFieldId = tag & Tag.FieldIdCompleteMask;
                 if (embeddedFieldId == Tag.FieldIdCompleteMask)
                 {
                     field.FieldIdDelta = reader.ReadVarUInt32();

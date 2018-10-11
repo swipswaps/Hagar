@@ -55,12 +55,13 @@ namespace Hagar.Codecs
         /// </summary>
         private static void ConsumeTagDelimitedField(this ref Reader reader)
         {
+            Field header = default;
             while (true)
             {
-                var field = reader.ReadFieldHeader();
-                if (field.IsEndObject) break;
-                if (field.IsEndBaseFields) continue;
-                reader.ConsumeUnknownField(field);
+                reader.ReadFieldHeader(ref header);
+                if (header.IsEndObject) break;
+                if (header.IsEndBaseFields) continue;
+                reader.ConsumeUnknownField(header);
             }
         }
     }
