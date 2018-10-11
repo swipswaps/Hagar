@@ -61,7 +61,7 @@ namespace Hagar.Json
 
         public bool IsSupportedType(Type type) => type == SelfType || this.isSupportedFunc(type);
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.LengthPrefixed} is supported for JSON fields. {field}");
     }
 }

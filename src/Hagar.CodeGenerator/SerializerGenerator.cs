@@ -305,7 +305,7 @@ namespace Hagar.CodeGenerator
                         SingletonSeparatedList(
                             VariableDeclarator(headerVar.Identifier).WithInitializer(EqualsValueClause(DefaultExpression(libraryTypes.Field.ToNameSyntax())))))));
 
-            body.Add(WhileStatement(LiteralExpression(SyntaxKind.TrueLiteralExpression), Block(GetDeserializerLoopBody())));
+            body.AddRange(GetDeserializerBody());
 
             var parameters = new[]
             {
@@ -324,16 +324,13 @@ namespace Hagar.CodeGenerator
                 .AddBodyStatements(body.ToArray());
 
             // Create the loop body.
-            List<StatementSyntax> GetDeserializerLoopBody()
+            List<StatementSyntax> GetDeserializerBody()
             {
-                return new List<StatementSyntax>
+                var readNextFieldHeader = new StatementSyntax[]
                 {
                     // C#: reader.ReadFieldHeader(ref header);
                     ExpressionStatement(InvocationExpression(readerParam.Member("ReadFieldHeader"),
-                                        ArgumentList(SingletonSeparatedList(Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)))))),
-
-                    // C#: if (header.IsEndBaseOrEndObject) break;
-                    IfStatement(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, headerVar, IdentifierName("IsEndBaseOrEndObject")), BreakStatement()),
+                        ArgumentList(SingletonSeparatedList(Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)))))),
 
                     // C#: fieldId += header.FieldIdDelta;
                     ExpressionStatement(
@@ -342,26 +339,21 @@ namespace Hagar.CodeGenerator
                             fieldIdVar,
                             Token(SyntaxKind.PlusEqualsToken),
                             MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, headerVar, IdentifierName("FieldIdDelta")))),
-
-                    // C#: switch (fieldId) { ... }
-                    SwitchStatement(fieldIdVar, List(GetSwitchSections()))
                 };
-            }
 
-            // Creates switch sections for each member.
-            List<SwitchSectionSyntax> GetSwitchSections()
-            {
-                var switchSections = new List<SwitchSectionSyntax>();
+                var result = new List<StatementSyntax>
+                {
+                    LabeledStatement("beginning", readNextFieldHeader[0]),
+                    readNextFieldHeader[1]
+                };
+
                 foreach (var member in typeDescription.Members)
                 {
-                    // C#: case <fieldId>:
-                    var label = CaseSwitchLabel(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(member.FieldId)));
-
                     // C#: instance.<member> = this.<codec>.ReadValue(ref reader, header);
                     var codec = fieldDescriptions.OfType<ICodecDescription>()
                         .Concat(libraryTypes.StaticCodecs)
                         .First(f => f.UnderlyingType.Equals(GetExpectedType(member.Type)));
-                    
+
                     // Codecs can either be static classes or injected into the constructor.
                     // Either way, the member signatures are the same.
                     var memberType = GetExpectedType(member.Type);
@@ -379,28 +371,51 @@ namespace Hagar.CodeGenerator
 
                     ExpressionSyntax readValueExpression = InvocationExpression(
                         codecExpression.Member("ReadValue"),
-                        ArgumentList(SeparatedList(new[] {Argument(readerParam).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)), Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.InKeyword))})));
+                        ArgumentList(SeparatedList(new[] { Argument(readerParam).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)), Argument(headerVar).WithRefOrOutKeyword(Token(SyntaxKind.InKeyword)) })));
                     if (!codec.UnderlyingType.Equals(member.Type))
                     {
                         // If the member type type differs from the codec type (eg because the member is an array), cast the result.
                         readValueExpression = CastExpression(member.Type.ToTypeSyntax(), readValueExpression);
                     }
 
+                    // C#: result.<fieldName> = $readValueExpression;
                     var memberAssignment =
-                        ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, instanceParam.Member(member.Member.Name), readValueExpression));
-                    var caseBody = List(new StatementSyntax[] { memberAssignment, BreakStatement() });
+                        ExpressionStatement(
+                            AssignmentExpression(
+                                SyntaxKind.SimpleAssignmentExpression,
+                                instanceParam.Member(member.Member.Name),
+                                readValueExpression));
 
-                    // Create the switch section with a break at the end.
-                    // C#: break;
-                    switchSections.Add(SwitchSection(SingletonList<SwitchLabelSyntax>(label), caseBody));
+                    // C#:
+                    // if (fieldId == <fieldId>)
+                    // {
+                    //   $memberAssignment
+                    //   $readNextFieldHeader[0]
+                    //   $readNextFieldHeader[1]
+                    // }
+                    result.Add(
+                        IfStatement(
+                            BinaryExpression(
+                                SyntaxKind.EqualsExpression,
+                                fieldIdVar,
+                                LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(member.FieldId))),
+                            Block(List(new[] { memberAssignment, readNextFieldHeader[0], readNextFieldHeader[1] }))));
                 }
 
-                // Add the default switch section.
-                var consumeUnknown = ExpressionStatement(InvocationExpression(readerParam.Member("ConsumeUnknownField"),
-                    ArgumentList(SeparatedList(new[] { Argument(headerVar) }))));
-                switchSections.Add(SwitchSection(SingletonList<SwitchLabelSyntax>(DefaultSwitchLabel()), List(new StatementSyntax[] { consumeUnknown, BreakStatement() })));
-
-                return switchSections;
+                // C#:
+                // if (!header.IsEndBaseOrEndObject)
+                // {
+                //   reader.ConsumeUnknownField();
+                //   goto beginning;
+                // }
+                result.Add(IfStatement(
+                    PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, headerVar, IdentifierName("IsEndBaseOrEndObject"))),
+                    Block(ExpressionStatement(
+                            InvocationExpression(readerParam.Member("ConsumeUnknownField"),
+                                ArgumentList(SeparatedList(new[] { Argument(headerVar) })))),
+                        GotoStatement(SyntaxKind.GotoStatement, "beginning".ToIdentifierName()))));
+                
+                return result;
             }
         }
 

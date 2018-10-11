@@ -8,7 +8,7 @@ namespace Hagar.Codecs
         /// <summary>
         /// Consumes an unknown field.
         /// </summary>
-        public static void ConsumeUnknownField(this ref Reader reader, Field field)
+        public static void ConsumeUnknownField(this ref Reader reader, in Field field)
         {
             // References cannot themselves be referenced.
             if (field.WireType == WireType.Reference)

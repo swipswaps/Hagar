@@ -15,12 +15,16 @@ namespace Hagar.WireProtocol
 
         private byte tag;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Tag(byte tag)
         {
             this.tag = tag;
         }
-        
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator Tag(byte tag) => new Tag(tag);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator byte(Tag tag) => tag.tag;
 
         /// <summary>

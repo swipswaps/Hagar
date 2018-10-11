@@ -24,7 +24,7 @@ namespace Hagar.Codecs
             return default;
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.VarInt} is supported for string fields. {field}");
     }
 
@@ -78,7 +78,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T>(item1);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -139,7 +139,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2>(item1, item2);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -210,7 +210,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3>(item1, item2, item3);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -289,7 +289,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4>(item1, item2, item3, item4);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -375,7 +375,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5>(item1, item2, item3, item4, item5);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -470,7 +470,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6>(item1, item2, item3, item4, item5, item6);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -575,7 +575,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6, T7>(item1, item2, item3, item4, item5, item6, item7);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 
@@ -687,7 +687,7 @@ namespace Hagar.Codecs
             return new ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8>(item1, item2, item3, item4, item5, item6, item7, item8);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.TagDelimited} is supported. {field}");
     }
 }

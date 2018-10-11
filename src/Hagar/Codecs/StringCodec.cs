@@ -56,7 +56,7 @@ namespace Hagar.Codecs
             writer.Write(bytes);
         }
 
-        private static void ThrowUnsupportedWireTypeException(Field field) => throw new UnsupportedWireTypeException(
+        private static void ThrowUnsupportedWireTypeException(in Field field) => throw new UnsupportedWireTypeException(
             $"Only a {nameof(WireType)} value of {WireType.LengthPrefixed} is supported for string fields. {field}");
     }
 }

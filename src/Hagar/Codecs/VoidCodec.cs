@@ -24,7 +24,7 @@ namespace Hagar.Codecs
             return ReferenceCodec.ReadReference<object>(ref reader, field);
         }
 
-        private static void ThrowInvalidWireType(Field field)
+        private static void ThrowInvalidWireType(in Field field)
         {
             throw new UnsupportedWireTypeException($"Expected a reference, but encountered wire type of '{field.WireType}'.");
         }
