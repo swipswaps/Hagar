@@ -26,7 +26,38 @@ Message:
   * Target -> Some app-specific definition of the target
   * Invokable -> Encapsulates target Interface, Method, Arguments
     * Reason to include interface: by including interface as a `Type`, we can support grain extensions
-		* Alternatively, because grain extensions must implement a special marker interface (IGrainExtension), we always know that the target will not directly implement the required interface and the invoker can _ask the target for its extension_. This last bit is hand-wavy and needs design. 
+		* Alternatively, because grain extensions must implement a special marker interface (IGrainExtension), we always know that the target will not directly implement the required interface and the invoker can _ask the target for its extension_. This last bit is hand-wavy and needs design. In Orleans we would want to pass the ActivationData since that has both the Grain (main target) as well as grain extensions. In order to keep things generic, we can take a new interface type and wrap the ActivationData in a struct which implements that interface, eg:
+
+``` csharp
+interface IHasTargetAndExtensions
+{
+	object GetTarget();
+	object GetExtension<T>();
+}
+
+struct ActivationDataTargetWithExtensions : IHasTargetAndExtensions
+{
+	private ActivationData inner;
+	
+	// We expect this to be called significantly more frequently than GetExtension. Theoretically
+	// these two methods could be merged into one, but splitting them out for the common case
+	// and less common case allows for improved performance.
+	T GetTarget<T>() => inner.Grain;
+
+	// Get the extension, potentially installing it (for auto-installed extensions)
+	T GetExtension<T>() => inner.GetExtension<T>(); 
+}
+
+// then the method on the IInvokable can look like this:
+void SetTarget<T>(T holder) where T : IHasTargetAndExtensions
+{
+	// If this is a regular grain method:
+	this.target = (TTarget)holder.GetTarget();
+	
+	// else if this is a grain extension:
+	this.target = inner.GetExtension<T>(); 
+}
+```
 
 ``` csharp
 // All methods generate a close which implements IInvokable.
