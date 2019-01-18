@@ -9,6 +9,25 @@ The goal is to transform some interface, `IMyInterface`, into at least two separ
 
 The proxy is a class which implements the interface.
 
+NOTE: for this design to work *well* (minimal interface dispatch) may require:
+
+* Serializer object pooling (done, we have that ability today)
+* Type substitution?! I.e, ideally we would want to say "deserialize this class which specifies the grain *interface* type, but specify the concrete grain type instead.
+    * I'm not certain if this is a good idea yet:
+        * For one, an interface can be implemented by multiple classes.
+        * How would this target grain extensions?
+        * Ideally we serialize the minimum information required to get the target (grain).
+        * In the event that the target is not yet activated, we also need anough information to activate it.
+            * NewPlacement calls could include additional information which is not usually required.
+        * GrainReference serialization today is flawed in terms of how generic arguments are serialized (as strings) and there are edge cases for generics (eg when iface generic params don't match class generic parameters). Currently the mapping between interface and implementation (type id) is done on the caller. The caller has a copy of the type map and constructs a GrainId/GrainReference using that type map.
+        * How should versioning work? Similar to iface -> class mapping, that can be done on the caller (during addressing/placement) and a version stamp added to the message header.
+
+Message:
+  * Target -> Some app-specific definition of the target
+  * Invokable -> Encapsulates target Interface, Method, Arguments
+    * Reason to include interface: by including interface as a `Type`, we can support grain extensions
+		* Alternatively, because grain extensions must implement a special marker interface (IGrainExtension), we always know that the target will not directly implement the required interface and the invoker can _ask the target for its extension_. This last bit is hand-wavy and needs design. 
+
 ``` csharp
 // All methods generate a close which implements IInvokable.
 // Methods with arguments also implement IInvokableWithArguments
@@ -56,15 +75,31 @@ public struct MyInterface_MyMethod_Closure<TTarget, TMethodArg1, TMethodParam2> 
   where TMethodArg1 : <method generic parameter constraints>
   // etc
 {
-    private MyInterface_MyMethod_Closure_Codec<TTarget, TMethodArg1, TMethodParam2> codec;
-    private TTarget target; // Generated deserializer is responsible for calling into (eg) catalog to get target implementation (eg, grain)
-    private TArg1 arg1;
-    private TArg2 arg2;
+    [NonSerialized]
+    public MyInterface_MyMethod_Closure_Codec<TTarget, TMethodArg1, TMethodParam2> codec;
+    
+    [Id(0)]
+    public TTarget target; // Generated deserializer is responsible for calling into (eg) catalog to get target implementation (eg, grain)
+    
+    [Id[1]]
+    public TArg1 arg1;
 
+    [Id(2)]
+    public TArg2 arg2; // etc
+
+    [NonSerialized]
     public TResult result;
+
+		// Allows us to support grain extensions (if !TargetType.IsAssignableFrom(target), get extension which matches TargetType)
+		[NonSerialized]
+		public Type TargetType => typeof(TTarget);
+
+		[NonSerialized]
+		public MethodInfo TargetMethod => typeof(TTarget).GetMethod(...);
 
     public object Result { get => this.result; set => this.result = (TResult)value; }
 
+    // The result is serialized directly and it will be deserialized by
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SerializeResult(ref Writer<TBuffer> writer) where TBuffer : IOutputStream;
 
@@ -98,13 +133,15 @@ public struct MyInterface_MyMethod_Closure<TTarget, TMethodArg1, TMethodParam2> 
     void Reset();
 }
 
-// Implementation holds the IInvokable struct
-public abstract class InvocationHolder : IInvokable // All invocation methods are forwarded to the IInvokable struct held by the subclass.
+// Implementation holds the IInvokable struct.
+// Why do it this way? We could make 
+public abstract class InvocationHolder : IInvokable
 {
 }
 
 // Specialized at runtime, based upon deserialized type.
 // This type can be pooled (and reset between uses by `holder.Payload = default`)
+// All invocation methods are forwarded to the IInvokable struct held by the subclass.
 public class InvocationHolder<TInvokable> : InvocationHolder where TInvokable : IInvokable
 {
     // Generated code sets this value
