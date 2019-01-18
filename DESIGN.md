@@ -13,54 +13,18 @@ NOTE: for this design to work *well* (minimal interface dispatch) may require:
 
 * Serializer object pooling (done, we have that ability today)
 * Type substitution?! I.e, ideally we would want to say "deserialize this class which specifies the grain *interface* type, but specify the concrete grain type instead.
-    * I'm not certain if this is a good idea yet:
-        * For one, an interface can be implemented by multiple classes.
-        * How would this target grain extensions?
-        * Ideally we serialize the minimum information required to get the target (grain).
-        * In the event that the target is not yet activated, we also need anough information to activate it.
-            * NewPlacement calls could include additional information which is not usually required.
-        * GrainReference serialization today is flawed in terms of how generic arguments are serialized (as strings) and there are edge cases for generics (eg when iface generic params don't match class generic parameters). Currently the mapping between interface and implementation (type id) is done on the caller. The caller has a copy of the type map and constructs a GrainId/GrainReference using that type map.
-        * How should versioning work? Similar to iface -> class mapping, that can be done on the caller (during addressing/placement) and a version stamp added to the message header.
+  * I'm not certain if this is a good idea yet:
+    * For one, an interface can be implemented by multiple classes.
+    * How would this target grain extensions?
+    * Ideally we serialize the minimum information required to get the target (grain).
+    * In the event that the target is not yet activated, we also need enough information to activate it.
+      * NewPlacement calls could include additional information which is not usually required.
+    * GrainReference serialization today is flawed in terms of how generic arguments are serialized (as strings) and there are edge cases for generics (eg when iface generic params don't match class generic parameters). Currently the mapping between interface and implementation (type id) is done on the caller. The caller has a copy of the type map and constructs a GrainId/GrainReference using that type map.
+    * How should versioning work? Similar to iface -> class mapping, that can be done on the caller (during addressing/placement) and a version stamp added to the message header.
 
-Message:
-  * Target -> Some app-specific definition of the target
-  * Invokable -> Encapsulates target Interface, Method, Arguments
-    * Reason to include interface: by including interface as a `Type`, we can support grain extensions
-		* Alternatively, because grain extensions must implement a special marker interface (IGrainExtension), we always know that the target will not directly implement the required interface and the invoker can _ask the target for its extension_. This last bit is hand-wavy and needs design. In Orleans we would want to pass the ActivationData since that has both the Grain (main target) as well as grain extensions. In order to keep things generic, we can take a new interface type and wrap the ActivationData in a struct which implements that interface, eg:
 
 ``` csharp
-interface IHasTargetAndExtensions
-{
-	object GetTarget();
-	object GetExtension<T>();
-}
-
-struct ActivationDataTargetWithExtensions : IHasTargetAndExtensions
-{
-	private ActivationData inner;
-	
-	// We expect this to be called significantly more frequently than GetExtension. Theoretically
-	// these two methods could be merged into one, but splitting them out for the common case
-	// and less common case allows for improved performance.
-	T GetTarget<T>() => inner.Grain;
-
-	// Get the extension, potentially installing it (for auto-installed extensions)
-	T GetExtension<T>() => inner.GetExtension<T>(); 
-}
-
-// then the method on the IInvokable can look like this:
-void SetTarget<T>(T holder) where T : IHasTargetAndExtensions
-{
-	// If this is a regular grain method:
-	this.target = (TTarget)holder.GetTarget();
-	
-	// else if this is a grain extension:
-	this.target = inner.GetExtension<T>(); 
-}
-```
-
-``` csharp
-// All methods generate a close which implements IInvokable.
+// All methods generate a 'closure' class which implements IInvokable.
 // Methods with arguments also implement IInvokableWithArguments
 // Methods which return a meaningful value (eg, Task<T>, ValueTask<T>) also implement IInvokableWithResult
 // Code generation uses these three interfaces
@@ -121,12 +85,12 @@ public struct MyInterface_MyMethod_Closure<TTarget, TMethodArg1, TMethodParam2> 
     [NonSerialized]
     public TResult result;
 
-		// Allows us to support grain extensions (if !TargetType.IsAssignableFrom(target), get extension which matches TargetType)
-		[NonSerialized]
-		public Type TargetType => typeof(TTarget);
+        // Allows us to support grain extensions (if !TargetType.IsAssignableFrom(target), get extension which matches TargetType)
+        [NonSerialized]
+        public Type TargetType => typeof(TTarget);
 
-		[NonSerialized]
-		public MethodInfo TargetMethod => typeof(TTarget).GetMethod(...);
+        [NonSerialized]
+        public MethodInfo TargetMethod => typeof(TTarget).GetMethod(...);
 
     public object Result { get => this.result; set => this.result = (TResult)value; }
 
@@ -136,6 +100,8 @@ public struct MyInterface_MyMethod_Closure<TTarget, TMethodArg1, TMethodParam2> 
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void DeserializeResult(ref Reader reader);
+
+    void SetTarget<T>()
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ValueTask Invoke()
@@ -179,4 +145,46 @@ public class InvocationHolder<TInvokable> : InvocationHolder where TInvokable : 
     TInvokable Payload { get; set; }
 }
 
+```
+
+Message:
+
+* Target -> Some app-specific definition of the target
+* Invokable -> Encapsulates target Interface, Method, Arguments
+  * Reason to include interface: by including interface as a `Type`, we can support grain extensions
+    * Alternatively, because grain extensions must implement a special marker interface (IGrainExtension), we always know that the target will not directly implement the required interface and the invoker can _ask the target for its extension_. This last bit is hand-wavy and needs design. In Orleans we would want to pass the ActivationData since that has both the Grain (main target) as well as grain extensions. In order to keep things generic, we can take a new interface type and wrap the ActivationData in a struct which implements that interface, eg:
+
+``` csharp
+// Hagar code
+interface ITargetHolder
+{
+    TTarget GetTarget<TTarget>();
+
+    // Extensions are mixins which are separate objects with their own interface that are attached to the target
+    TExtension GetExtension<TExtension>();
+}
+
+// Orleans-specific code
+struct ActivationDataTargetWithExtensions : ITargetHolder
+{
+    private ActivationData inner;
+
+    // We expect this to be called significantly more frequently than GetExtension. Theoretically
+    // these two methods could be merged into one, but splitting them out for the common case
+    // and less common case allows for improved performance.
+    TTarget GetTarget<TTarget>() => inner.Grain;
+
+    // Get the extension, potentially installing it (for auto-installed extensions)
+    TExtension GetExtension<TExtension>() => inner.GetExtension<TExtension>(); 
+}
+
+// then the method on the IInvokable can look like this:
+void SetTarget<T>(T holder) where T : ITargetHolder
+{
+    // If this is a regular grain method:
+    this.target = (TTarget)holder.GetTarget();
+
+    // else if this is a grain extension:
+    this.target = inner.GetExtension<T>(); 
+}
 ```
