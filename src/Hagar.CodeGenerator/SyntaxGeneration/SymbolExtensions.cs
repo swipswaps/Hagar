@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -11,6 +11,15 @@ namespace Hagar.CodeGenerator.SyntaxGeneration
         public static TypeSyntax ToTypeSyntax(this ITypeSymbol typeSymbol)
         {
             return ParseTypeName(typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        public static TypeSyntax ToTypeSyntax(this ITypeSymbol typeSymbol, params TypeSyntax[] genericParameters)
+        {
+            var displayString = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!(ParseTypeName(displayString) is GenericNameSyntax generic))
+                throw new InvalidOperationException(
+                    $"Attempted to add generic parameters to non-generic type {displayString}, adding parameters {string.Join(", ", genericParameters.Select(n => n.ToFullString()))}");
+            return generic.WithTypeArgumentList(TypeArgumentList(SeparatedList(genericParameters)));
         }
 
         public static NameSyntax ToNameSyntax(this ITypeSymbol typeSymbol)

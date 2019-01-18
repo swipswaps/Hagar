@@ -20,11 +20,16 @@ namespace Hagar.CodeGenerator
                 IBufferWriter = Type("System.Buffers.IBufferWriter`1"),
                 Reader = Type("Hagar.Buffers.Reader"),
                 SerializerSession = Type("Hagar.Session.SerializerSession"),
+                Invokable = Type("Hagar.Invocation.Invokable"),
                 Object = compilation.GetSpecialType(SpecialType.System_Object),
                 Type = Type("System.Type"),
                 SerializerConfiguration = Type("Hagar.Configuration.SerializerConfiguration"),
                 ConfigurationProvider = Type("Hagar.Configuration.IConfigurationProvider`1"),
-                StaticCodecs = new List<StaticCodecDescription>()
+                GenerateMethodSerializersAttribute = Type("Hagar.GenerateMethodSerializersAttribute"),
+                GenerateSerializerAttribute = Type("Hagar.GenerateSerializerAttribute"),
+                MetadataProviderAttribute = Type("Hagar.Configuration.MetadataProviderAttribute"),
+                IdAttribute = Type("Hagar.IdAttribute"),
+                StaticCodecs = new List<StaticCodecDescription>
                 {
                     new StaticCodecDescription(compilation.GetSpecialType(SpecialType.System_Boolean), Type("Hagar.Codecs.BoolCodec")),
                     new StaticCodecDescription(compilation.GetSpecialType(SpecialType.System_Char), Type("Hagar.Codecs.CharCodec")),
@@ -57,6 +62,12 @@ namespace Hagar.CodeGenerator
                 return result;
             }
         }
+        
+        public INamedTypeSymbol MetadataProviderAttribute { get; private set; }
+
+        public INamedTypeSymbol IdAttribute { get; private set; }
+
+        public INamedTypeSymbol GenerateSerializerAttribute { get; private set; }
 
         public List<StaticCodecDescription> StaticCodecs { get; private set; }
 
@@ -82,7 +93,12 @@ namespace Hagar.CodeGenerator
 
         public INamedTypeSymbol PartialSerializer { get; private set; }
 
+        public INamedTypeSymbol Invokable { get; private set; }
+
         public INamedTypeSymbol ValueSerializer { get; private set; }
+
         public INamedTypeSymbol Byte { get; private set; }
+
+        public INamedTypeSymbol GenerateMethodSerializersAttribute { get; private set; }
     }
 }

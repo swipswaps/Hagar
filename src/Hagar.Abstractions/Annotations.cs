@@ -1,9 +1,14 @@
-﻿using System;
+using System;
 
 namespace Hagar
 {
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Enum)]
     public sealed class GenerateSerializerAttribute : Attribute
+    {
+    }
+
+    [AttributeUsage(AttributeTargets.Interface)]
+    public sealed class GenerateMethodSerializersAttribute : Attribute
     {
     }
 

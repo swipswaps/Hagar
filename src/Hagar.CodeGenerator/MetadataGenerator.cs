@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Hagar.CodeGenerator.SyntaxGeneration;
 using Microsoft.CodeAnalysis;
@@ -18,7 +18,7 @@ namespace Hagar.CodeGenerator
             body.AddRange(
                 serializableTypes.Select(
                     type =>
-                        (StatementSyntax) ExpressionStatement(InvocationExpression(addMethod, ArgumentList(SingletonSeparatedList(Argument(TypeOfExpression(GetPartialSerializerTypeName(type.Type)))))))
+                        (StatementSyntax) ExpressionStatement(InvocationExpression(addMethod, ArgumentList(SingletonSeparatedList(Argument(TypeOfExpression(GetPartialSerializerTypeName(type)))))))
                 ));
 
             var libraryTypes = LibraryTypes.FromCompilation(compilation);
@@ -36,7 +36,7 @@ namespace Hagar.CodeGenerator
                 .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetGeneratedCodeAttributeSyntax())))
                 .AddMembers(configureMethod);
 
-            TypeSyntax GetPartialSerializerTypeName(INamedTypeSymbol type)
+            TypeSyntax GetPartialSerializerTypeName(ITypeDescription type)
             {
                 var genericArity = type.TypeParameters.Length;
                 var name = SerializerGenerator.GetSimpleClassName(type);

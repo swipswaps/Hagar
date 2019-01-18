@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,7 +46,19 @@ namespace Hagar.CodeGenerator
         public IPropertySymbol Property { get; }
     }
 
-    internal class TypeDescription
+    internal interface ITypeDescription
+    {
+        TypeSyntax TypeSyntax { get; }
+        bool HasComplexBaseType { get; }
+        INamedTypeSymbol BaseType { get; }
+        string Name { get; }
+        bool IsValueType { get; }
+        bool IsGenericType { get; }
+        ImmutableArray<ITypeParameterSymbol> TypeParameters { get; }
+        List<IMemberDescription> Members { get; }
+    }
+
+    internal class TypeDescription : ITypeDescription
     {
         public TypeDescription(INamedTypeSymbol type, IEnumerable<IMemberDescription> members)
         {
@@ -53,36 +66,60 @@ namespace Hagar.CodeGenerator
             this.Members = members.ToList();
         }
 
-        public INamedTypeSymbol Type { get; }
+        private INamedTypeSymbol Type { get; }
+
+        public TypeSyntax TypeSyntax => this.Type.ToTypeSyntax();
+
+        public bool HasComplexBaseType => !this.IsValueType &&
+                                          this.Type.BaseType != null &&
+                                          this.Type.BaseType.SpecialType != SpecialType.System_Object;
+
+        public INamedTypeSymbol BaseType => this.Type.BaseType;
+
+        public string Name => this.Type.Name;
+
+        public bool IsValueType => this.Type.IsValueType;
+
+        public bool IsGenericType => this.Type.IsGenericType;
+
+        public ImmutableArray<ITypeParameterSymbol> TypeParameters => this.Type.TypeParameters;
 
         public List<IMemberDescription> Members { get; }
     }
-    
+
+    internal class MethodDescription
+    {
+        public MethodDescription(IMethodSymbol method)
+        {
+            this.Method = method;
+        }
+
+        public IMethodSymbol Method { get; }
+    }
+
     public class CodeGenerator
     {
         internal const string CodeGeneratorName = "HagarGen";
         private readonly Compilation compilation;
-        private readonly INamedTypeSymbol generateSerializerAttribute;
-        private readonly INamedTypeSymbol fieldIdAttribute;
+        private readonly LibraryTypes libraryTypes;
 
         public CodeGenerator(Compilation compilation)
         {
             this.compilation = compilation;
-            this.generateSerializerAttribute = compilation.GetTypeByMetadataName("Hagar.GenerateSerializerAttribute");
-            this.fieldIdAttribute = compilation.GetTypeByMetadataName("Hagar.IdAttribute");
+            this.libraryTypes = LibraryTypes.FromCompilation(compilation);
         }
 
         public async Task<CompilationUnitSyntax> GenerateCode(CancellationToken cancellationToken)
         {
             // Collect metadata from the compilation.
-            var serializableTypes = await GetSerializableTypes(cancellationToken);
+            var serializableTypes = await this.GetSerializableTypes(cancellationToken);
 
             // Generate code.
             var members = new List<MemberDeclarationSyntax>();
             foreach (var type in serializableTypes)
             {
                 // Generate a partial serializer class for each serializable type.
-                members.Add(SerializerGenerator.GenerateSerializer(this.compilation, type));
+                members.Add(SerializerGenerator.GenerateSerializer(this.compilation, this.libraryTypes, type));
             }
 
             var namespaceName = "HagarGeneratedCode." + this.compilation.AssemblyName;
@@ -95,7 +132,7 @@ namespace Hagar.CodeGenerator
                 .WithTarget(AttributeTargetSpecifier(Token(SyntaxKind.AssemblyKeyword)))
                 .WithAttributes(
                     SingletonSeparatedList(
-                        Attribute(this.compilation.GetTypeByMetadataName("Hagar.Configuration.MetadataProviderAttribute").ToNameSyntax())
+                        Attribute(this.libraryTypes.MetadataProviderAttribute.ToNameSyntax())
                             .AddArgumentListArguments(AttributeArgument(TypeOfExpression(ParseTypeName($"{namespaceName}.{metadataClass.Identifier.Text}"))))));
 
             return CompilationUnit()
@@ -116,7 +153,7 @@ namespace Hagar.CodeGenerator
                 var rootNode = await syntaxTree.GetRootAsync(cancellationToken);
                 foreach (var node in GetTypeDeclarations(rootNode))
                 {
-                    if (!this.HasGenerateSerializerAttribute(node, semanticModel)) continue;
+                    if (!this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateSerializerAttribute)) continue;
                     results.Add(this.CreateTypeDescription(semanticModel, node));
                 }
             }
@@ -167,9 +204,9 @@ namespace Hagar.CodeGenerator
                 // Only consider fields and properties.
                 if (!(member is IFieldSymbol || member is IPropertySymbol)) continue;
 
-                var fieldIdAttr = member.GetAttributes().SingleOrDefault(attr => attr.AttributeClass.Equals(this.fieldIdAttribute));
-                if (fieldIdAttr == null) continue;
-                var id = (uint)fieldIdAttr.ConstructorArguments.First().Value;
+                var idAttr = member.GetAttributes().SingleOrDefault(attr => attr.AttributeClass.Equals(this.libraryTypes.IdAttribute));
+                if (idAttr == null) continue;
+                var id = (uint)idAttr.ConstructorArguments.First().Value;
 
                 if (member is IPropertySymbol prop)
                 {
@@ -195,25 +232,25 @@ namespace Hagar.CodeGenerator
             }
         }
 
-        // Returns true if the type declaration has the [GenerateSerializer] attribute.
-        private bool HasGenerateSerializerAttribute(TypeDeclarationSyntax node, SemanticModel model)
+        // Returns true if the type declaration has the specified attribute.
+        private bool HasAttribute(TypeDeclarationSyntax node, SemanticModel model, ISymbol attributeType)
         {
             switch (node)
             {
                 case ClassDeclarationSyntax classDecl:
-                    return HasAttribute(classDecl.AttributeLists);
+                    return HasAttributeInner(classDecl.AttributeLists);
                 case StructDeclarationSyntax structDecl:
-                    return HasAttribute(structDecl.AttributeLists);
+                    return HasAttributeInner(structDecl.AttributeLists);
                 default:
                     return false;
             }
 
-            bool HasAttribute(SyntaxList<AttributeListSyntax> attributeLists)
+            bool HasAttributeInner(SyntaxList<AttributeListSyntax> attributeLists)
             {
                 return attributeLists
                     .SelectMany(list => list.Attributes)
                     .Select(attr => model.GetTypeInfo(attr).ConvertedType)
-                    .Any(attrType => attrType.Equals(this.generateSerializerAttribute));
+                    .Any(attrType => attrType.Equals(attributeType));
             }
         }
 

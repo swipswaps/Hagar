@@ -1,5 +1,37 @@
 
-## Method call serialization
+## Method call serialization - RPC rework
+
+The existing RPC in Orleans is quite powerful. It supports polymorphism for method arguments, generic interfaces, generic methods, separation of interface & implementation, grain call filters, and mixins (via grain extensions).
+
+However, there are significant costs associated with Orleans' current RPC implementation.
+
+Regarding runtime performance:
+
+* All method arguments and results are boxed.
+* All methods arguments and results must have their type names serialized in full (increasing payload size and decreasing performance).
+* There is a significant amount of asynchronous machinery involved. We currently box `ValueTask`/`Task`/`ValueTask<T>`/`Task<T>` into `Task<object>` which requires extra trips through the `TaskScheduler` and extra allocations on the callee side.
+* We also have to perform this extra trip through the `TaskScheduler` on the caller side in order to convert from `Task<object>` back to `Task<T>` (or whatever the method return type is), so those costs are paid twice.
+* It is very allocation heavy due to boxing, allocation of arguments arrays, allocation of request/response objects.
+* Casting to/from `object` in several places adds overhead (type checks, etc aside from aforementioned boxing).
+* Method dispatch requires a nested case statement (matching first against `InterfaceId` and then against `MethodId`), which doesn't pipeline well (i.e, branch misprediction hit &amp; CPU cache hit).
+* Before method dispatch can occur, the `IGrainMethodInvoker` implementation must be retrieved. This requires a dictionary lookup plus additional interface calls. For generic interfaces, this requires string comparison on every call.
+* Generic method support requires runtime IL generation which comes with additional startup cost (paid on first usage) and is not supported on AOT platforms (low pri).
+
+Almost all of these costs can be reduced and a lot of infrastructure code can be removed by adopting a different approach.
+
+The essence of the approach suggested here is to do away with generated `IGrainMethodInvoker` implementations by moving to per-method invokers which are created by our code generator and contain the method arguments as fields. In doing so, we can generate code which is precisely aware of the method types and return type.
+
+This lets us:
+
+* Efficiently serialize method arguments and result arguments, since we can take advantage of our `ExpectedType` serialization in most cases.
+* Avoid boxing since we have the precise type information.
+* Avoid both conversions to/from `Task<object>` and the associated `TaskScheduler` hit.
+* Implement generic interfaces &amp; generic methods without runtime reflection.
+* Avoid many conditionals which result in poor branch prediction / CPU pipeline usage today.
+* Avoid dictionary lookups.
+* Avoid most or all allocations which are not strictly required today.
+* Maintain flexibility of which serializer we use. The serializer does not have to be Hagar. We can still gain many benefits from using this with Orleans' existing serializer.
+* Maintain backwards compatibility for one or more versions of Orleans.
 
 Implementing RPC requires serializing information about which method is being called and (in our case) information about which object the target of that method is.
 
@@ -21,7 +53,6 @@ NOTE: for this design to work *well* (minimal interface dispatch) may require:
       * NewPlacement calls could include additional information which is not usually required.
     * GrainReference serialization today is flawed in terms of how generic arguments are serialized (as strings) and there are edge cases for generics (eg when iface generic params don't match class generic parameters). Currently the mapping between interface and implementation (type id) is done on the caller. The caller has a copy of the type map and constructs a GrainId/GrainReference using that type map.
     * How should versioning work? Similar to iface -> class mapping, that can be done on the caller (during addressing/placement) and a version stamp added to the message header.
-
 
 ``` csharp
 // All methods generate a 'closure' class which implements IInvokable.
@@ -72,10 +103,13 @@ public struct MyInterface_MyMethod_Closure<TTarget, TMethodArg1, TMethodParam2> 
 {
     [NonSerialized]
     public MyInterface_MyMethod_Closure_Codec<TTarget, TMethodArg1, TMethodParam2> codec;
-    
-    [Id(0)]
+
+    [NonSerialized]
     public TTarget target; // Generated deserializer is responsible for calling into (eg) catalog to get target implementation (eg, grain)
-    
+
+    // These Id attributes are used by Hagar for code generation. They are used to support version tolerance.
+    // Our code generator could potentially emit attributes for other serializers, for example Json.NET, protobuf-net, or Bond.
+    // That would us to reduce lock-in to Hagar and make the RPC code more portable.
     [Id[1]]
     public TArg1 arg1;
 
