@@ -111,7 +111,7 @@ namespace Hagar.CodeGenerator
                 {
                     case MethodParameterFieldDescription serializable:
                         return FieldDeclaration(VariableDeclaration(description.FieldType.ToTypeSyntax(), SingletonSeparatedList(VariableDeclarator(description.FieldName))))
-                            .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.ReadOnlyKeyword));
+                            .AddModifiers(Token(SyntaxKind.PublicKeyword));
                     default:
                         return FieldDeclaration(VariableDeclaration(description.FieldType.ToTypeSyntax(), SingletonSeparatedList(VariableDeclarator(description.FieldName))))
                             .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.ReadOnlyKeyword));
@@ -227,7 +227,8 @@ namespace Hagar.CodeGenerator
             public uint FieldId { get; }
             public ISymbol Member => this.Parameter;
             public ITypeSymbol Type => this.FieldType;
-            public IParameterSymbol Parameter { get; } 
+            public IParameterSymbol Parameter { get; }
+            public string Name => this.FieldName;
         }
     }
 }

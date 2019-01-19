@@ -110,8 +110,9 @@ public interface IInvokable
 }
 
 /// <inheritdoc />
-public abstract class Invokable : IInvokable
+public abstract class Invokable // : IInvokable
 {
+    /*
     /// <inheritdoc />
     public abstract TTarget GetTarget<TTarget>();
 
@@ -148,6 +149,7 @@ public abstract class Invokable : IInvokable
 
     /// <inheritdoc />
     public abstract void Reset();
+    */
 }
 
 // for experimentation
@@ -160,7 +162,7 @@ public class MyImplementation : IMyInterface
 {
     public ValueTask<int> Multiply(int a, int b) => new ValueTask<int>(a * b);
 }
-
+    /*
 // Note that we would want to optimize type name serialization for these generated classes.
 // We can generate special type ids for each (note: must support generic methods, which will be expressed as generic IInvokable impls)
 // We can even use an custom serializer (within the Hagar wire protocol) which has its own type encoding and lookup table (eg populated using feature providers)
@@ -294,5 +296,5 @@ public sealed partial class Generated_MyInterface_Proxy : IMyInterface
             this.pool.Return(request);
         }
     }
-}
+}*/
 }

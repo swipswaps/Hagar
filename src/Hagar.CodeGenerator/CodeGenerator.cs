@@ -16,6 +16,7 @@ namespace Hagar.CodeGenerator
         uint FieldId { get; }
         ISymbol Member { get; }
         ITypeSymbol Type { get; }
+        string Name { get; }
     }
 
     internal class FieldDescription : IMemberDescription
@@ -30,6 +31,7 @@ namespace Hagar.CodeGenerator
         public uint FieldId { get; }
         public ISymbol Member => this.Field;
         public ITypeSymbol Type => this.Field.Type;
+        public string Name => this.Field.Name;
     }
 
     internal class PropertyDescription : IMemberDescription
@@ -44,6 +46,7 @@ namespace Hagar.CodeGenerator
         public ISymbol Member => this.Property;
         public ITypeSymbol Type => this.Property.Type;
         public IPropertySymbol Property { get; }
+        public string Name => this.Property.Name;
     }
 
     internal interface ISerializableTypeDescription

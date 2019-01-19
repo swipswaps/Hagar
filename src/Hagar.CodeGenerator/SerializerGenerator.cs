@@ -231,7 +231,7 @@ namespace Hagar.CodeGenerator
                                         Argument(writerParam).WithRefOrOutKeyword(Token(SyntaxKind.RefKeyword)),
                                         Argument(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(fieldIdDelta))),
                                         Argument(expectedType.FieldName.ToIdentifierName()),
-                                        Argument(instanceParam.Member(member.Member.Name))
+                                        Argument(instanceParam.Member(member.Name))
                                     })))));
             }
 
@@ -377,7 +377,7 @@ namespace Hagar.CodeGenerator
                     }
 
                     var memberAssignment =
-                        ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, instanceParam.Member(member.Member.Name), readValueExpression));
+                        ExpressionStatement(AssignmentExpression(SyntaxKind.SimpleAssignmentExpression, instanceParam.Member(member.Name), readValueExpression));
                     var caseBody = List(new StatementSyntax[] { memberAssignment, BreakStatement() });
 
                     // Create the switch section with a break at the end.
