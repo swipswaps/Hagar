@@ -16,10 +16,37 @@ namespace Hagar.CodeGenerator.SyntaxGeneration
         public static TypeSyntax ToTypeSyntax(this ITypeSymbol typeSymbol, params TypeSyntax[] genericParameters)
         {
             var displayString = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!(ParseTypeName(displayString) is GenericNameSyntax generic))
+            var nameSyntax = ParseName(displayString);
+
+            switch (nameSyntax)
+            {
+                case AliasQualifiedNameSyntax aliased:
+                    return aliased.WithName(WithGenericParameters(aliased.Name));
+                case QualifiedNameSyntax qualified:
+                    return qualified.WithRight(WithGenericParameters(qualified.Right));
+                case GenericNameSyntax g:
+                    return WithGenericParameters(g);
+                default:
+                    ThrowInvalidOperationException();
+                    return default;
+            }
+            
+            SimpleNameSyntax WithGenericParameters(SimpleNameSyntax simpleNameSyntax)
+            {
+                if (simpleNameSyntax is GenericNameSyntax generic)
+                {
+                    return generic.WithTypeArgumentList(TypeArgumentList(SeparatedList(genericParameters)));
+                }
+
+                ThrowInvalidOperationException();
+                return default;
+            }
+
+            void ThrowInvalidOperationException()
+            {
                 throw new InvalidOperationException(
-                    $"Attempted to add generic parameters to non-generic type {displayString}, adding parameters {string.Join(", ", genericParameters.Select(n => n.ToFullString()))}");
-            return generic.WithTypeArgumentList(TypeArgumentList(SeparatedList(genericParameters)));
+                    $"Attempted to add generic parameters to non-generic type {displayString} ({nameSyntax.GetType()}, adding parameters {string.Join(", ", genericParameters.Select(n => n.ToFullString()))}");
+            }
         }
 
         public static NameSyntax ToNameSyntax(this ITypeSymbol typeSymbol)

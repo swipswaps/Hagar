@@ -4,6 +4,7 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <OutputType>Exe</OutputType>
     <HagarCodeGen>true</HagarCodeGen>
+    <!--<HagarCodeGenWaitForDebugger>true</HagarCodeGenWaitForDebugger>-->
   </PropertyGroup>
 
   <ItemGroup>

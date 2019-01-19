@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using Hagar.CodeGenerator.SyntaxGeneration;
 using Microsoft.CodeAnalysis;
@@ -11,20 +12,16 @@ namespace Hagar.CodeGenerator
 {
     internal static class InvokableGenerator
     {
-        private const string SerializeMethodName = "Serialize";
-        private const string DeserializeMethodName = "Deserialize";
-
-        public static ClassDeclarationSyntax Generate(Compilation compilation, MethodDescription methodDescription)
+        public static (ClassDeclarationSyntax, ISerializableTypeDescription) Generate(Compilation compilation, LibraryTypes libraryTypes, MethodDescription methodDescription)
         {
             var method = methodDescription.Method;
-            var libraryTypes = LibraryTypes.FromCompilation(compilation);
-            var simpleMethodName = GetSimpleMethodName(libraryTypes, method);
+            var generatedClassName = GetSimpleClassName(method);
 
-            var fieldDescriptions = GetFieldDescriptions(methodDescription.Method.Parameters.Select(p => p.Type).ToList(), libraryTypes);
+            var fieldDescriptions = GetFieldDescriptions(methodDescription.Method, libraryTypes);
             var fields = GetFieldDeclarations(fieldDescriptions);
-            var ctor = GenerateConstructor(simpleMethodName, fieldDescriptions);
+            var ctor = GenerateConstructor(generatedClassName, fieldDescriptions);
             
-            var classDeclaration = ClassDeclaration(simpleMethodName)
+            var classDeclaration = ClassDeclaration(generatedClassName)
                 .AddBaseListTypes(SimpleBaseType(libraryTypes.Invokable.ToTypeSyntax()))
                 .AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.SealedKeyword))
                 .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetGeneratedCodeAttributeSyntax())))
@@ -36,10 +33,30 @@ namespace Hagar.CodeGenerator
                 classDeclaration = AddGenericTypeConstraints(classDeclaration, method);
             }
 
-            return classDeclaration;
+            return (classDeclaration, new GeneratedInvokerDescription(methodDescription, generatedClassName, fieldDescriptions.OfType<IMemberDescription>().ToList()));
         }
 
-        public static string GetSimpleMethodName(LibraryTypes libraryTypes, IMethodSymbol method)
+        private class GeneratedInvokerDescription : ISerializableTypeDescription
+        {
+            private readonly MethodDescription methodDescription;
+            public GeneratedInvokerDescription(MethodDescription methodDescription, string generatedClassName, List<IMemberDescription> members)
+            {
+                this.methodDescription = methodDescription;
+                this.Name = generatedClassName;
+                this.Members = members;
+            }
+
+            public TypeSyntax TypeSyntax => this.methodDescription.GetInvokableTypeName();
+            public bool HasComplexBaseType => false;
+            public INamedTypeSymbol BaseType => throw new NotImplementedException();
+            public string Name { get; }
+            public bool IsValueType => false;
+            public bool IsGenericType => this.methodDescription.Method.IsGenericMethod;
+            public ImmutableArray<ITypeParameterSymbol> TypeParameters => this.methodDescription.Method.TypeParameters;
+            public List<IMemberDescription> Members { get; } 
+        }
+
+        public static string GetSimpleClassName(IMethodSymbol method)
         {
             var typeArgs = method.TypeParameters.Length > 0 ? "_" + method.TypeParameters.Length : string.Empty;
             var args = method.Parameters.Length > 0
@@ -92,13 +109,9 @@ namespace Hagar.CodeGenerator
             {
                 switch (description)
                 {
-                    case TypeFieldDescription type:
-                        return FieldDeclaration(
-                                VariableDeclaration(
-                                    type.FieldType.ToTypeSyntax(),
-                                    SingletonSeparatedList(VariableDeclarator(type.FieldName)
-                                        .WithInitializer(EqualsValueClause(TypeOfExpression(type.UnderlyingType.ToTypeSyntax()))))))
-                            .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword));
+                    case MethodParameterFieldDescription serializable:
+                        return FieldDeclaration(VariableDeclaration(description.FieldType.ToTypeSyntax(), SingletonSeparatedList(VariableDeclarator(description.FieldName))))
+                            .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.ReadOnlyKeyword));
                     default:
                         return FieldDeclaration(VariableDeclaration(description.FieldType.ToTypeSyntax(), SingletonSeparatedList(VariableDeclarator(description.FieldName))))
                             .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.ReadOnlyKeyword));
@@ -129,32 +142,18 @@ namespace Hagar.CodeGenerator
             }
         }
 
-        private static List<FieldDescription> GetFieldDescriptions(List<ITypeSymbol> memberTypes, LibraryTypes libraryTypes)
+        private static List<FieldDescription> GetFieldDescriptions(IMethodSymbol method, LibraryTypes libraryTypes)
         {
             var fields = new List<FieldDescription>();
-            var distinct = memberTypes.Select(m => GetExpectedType(m)).Distinct();
-            fields.AddRange(distinct.Select(GetTypeDescription));
-            
-            // Add a codec field for any field in the target which does not have a static codec.
-            fields.AddRange(distinct
-                .Where(t => !libraryTypes.StaticCodecs.Any(c => c.UnderlyingType.Equals(t)))
-                .Select(GetCodecDescription));
+
+            uint fieldId = 0;
+            foreach (var parameter in method.Parameters)
+            {
+                fields.Add(new MethodParameterFieldDescription(parameter, $"arg{fieldId}", fieldId));
+                fieldId++;
+            }
+
             return fields;
-
-            CodecFieldDescription GetCodecDescription(ITypeSymbol t)
-            {
-                var codecType = libraryTypes.FieldCodec.Construct(t);
-                var fieldName = '_' + ToLowerCamelCase(t.GetValidIdentifier()) + "Codec";
-                return new CodecFieldDescription(codecType, fieldName, t);
-            }
-
-            TypeFieldDescription GetTypeDescription(ITypeSymbol t)
-            {
-                var fieldName = ToLowerCamelCase(t.GetValidIdentifier()) + "Type";
-                return new TypeFieldDescription(libraryTypes.Type, fieldName, t);
-            }
-
-            string ToLowerCamelCase(string input) => char.IsLower(input, 0) ? input : char.ToLowerInvariant(input[0]) + input.Substring(1);
         }
 
         /// <summary>
@@ -170,6 +169,7 @@ namespace Hagar.CodeGenerator
                 throw new NotSupportedException($"Cannot serialize pointer type {pointerType.Name}");
             return type;
         }
+        
         internal abstract class FieldDescription
         {
             protected FieldDescription(ITypeSymbol fieldType, string fieldName)
@@ -212,6 +212,22 @@ namespace Hagar.CodeGenerator
 
             public ITypeSymbol UnderlyingType { get; }
             public override bool IsInjected => false;
+        }
+
+        internal class MethodParameterFieldDescription : FieldDescription, IMemberDescription
+        {
+            public MethodParameterFieldDescription(IParameterSymbol parameter, string fieldName, uint fieldId)
+                : base(parameter.Type, fieldName)
+            {
+                this.FieldId = fieldId;
+                this.Parameter = parameter;
+            }
+
+            public override bool IsInjected => false;
+            public uint FieldId { get; }
+            public ISymbol Member => this.Parameter;
+            public ITypeSymbol Type => this.FieldType;
+            public IParameterSymbol Parameter { get; } 
         }
     }
 }

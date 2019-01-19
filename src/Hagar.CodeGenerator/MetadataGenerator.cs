@@ -10,7 +10,7 @@ namespace Hagar.CodeGenerator
 {
     internal static class MetadataGenerator
     {
-        public static ClassDeclarationSyntax GenerateMetadata(Compilation compilation, List<TypeDescription> serializableTypes)
+        public static ClassDeclarationSyntax GenerateMetadata(Compilation compilation, List<ISerializableTypeDescription> serializableTypes)
         {
             var configParam = "config".ToIdentifierName();
             var addMethod = configParam.Member("Serializers").Member("Add");
@@ -35,18 +35,30 @@ namespace Hagar.CodeGenerator
                 .AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.SealedKeyword))
                 .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetGeneratedCodeAttributeSyntax())))
                 .AddMembers(configureMethod);
+        }
 
-            TypeSyntax GetPartialSerializerTypeName(ITypeDescription type)
+        public static TypeSyntax GetPartialSerializerTypeName(this ISerializableTypeDescription type)
+        {
+            var genericArity = type.TypeParameters.Length;
+            var name = SerializerGenerator.GetSimpleClassName(type);
+            if (genericArity > 0)
             {
-                var genericArity = type.TypeParameters.Length;
-                var name = SerializerGenerator.GetSimpleClassName(type);
-                if (genericArity > 0)
-                {
-                    name += $"<{new string(',', genericArity - 1)}>";
-                }
-
-                return ParseTypeName(name);
+                name += $"<{new string(',', genericArity - 1)}>";
             }
+
+            return ParseTypeName(name);
+        }
+
+        public static TypeSyntax GetInvokableTypeName(this MethodDescription method)
+        {
+            var genericArity = method.Method.TypeParameters.Length + method.Method.ContainingType.TypeParameters.Length;
+            var name = InvokableGenerator.GetSimpleClassName(method.Method);
+            if (genericArity > 0)
+            {
+                name += $"<{new string(',', genericArity - 1)}>";
+            }
+
+            return ParseTypeName(name);
         }
     }
 }

@@ -15,19 +15,19 @@ namespace Hagar.CodeGenerator
         private const string SerializeMethodName = "Serialize";
         private const string DeserializeMethodName = "Deserialize";
 
-        public static ClassDeclarationSyntax GenerateSerializer(Compilation compilation, LibraryTypes libraryTypes, ITypeDescription typeDescription)
+        public static ClassDeclarationSyntax GenerateSerializer(Compilation compilation, LibraryTypes libraryTypes, ISerializableTypeDescription serializableTypeDescription)
         {
-            var simpleClassName = GetSimpleClassName(typeDescription);
+            var simpleClassName = GetSimpleClassName(serializableTypeDescription);
 
-            var serializerInterface = typeDescription.IsValueType ? libraryTypes.ValueSerializer : libraryTypes.PartialSerializer;
-            var baseInterface = serializerInterface.ToTypeSyntax(typeDescription.TypeSyntax);
+            var serializerInterface = serializableTypeDescription.IsValueType ? libraryTypes.ValueSerializer : libraryTypes.PartialSerializer;
+            var baseInterface = serializerInterface.ToTypeSyntax(serializableTypeDescription.TypeSyntax);
 
-            var fieldDescriptions = GetFieldDescriptions(typeDescription, libraryTypes);
+            var fieldDescriptions = GetFieldDescriptions(serializableTypeDescription, libraryTypes);
             var fields = GetFieldDeclarations(fieldDescriptions);
             var ctor = GenerateConstructor(simpleClassName, fieldDescriptions);
 
-            var serializeMethod = GenerateSerializeMethod(typeDescription, fieldDescriptions, libraryTypes);
-            var deserializeMethod = GenerateDeserializeMethod(typeDescription, fieldDescriptions, libraryTypes);
+            var serializeMethod = GenerateSerializeMethod(serializableTypeDescription, fieldDescriptions, libraryTypes);
+            var deserializeMethod = GenerateDeserializeMethod(serializableTypeDescription, fieldDescriptions, libraryTypes);
 
             var classDeclaration = ClassDeclaration(simpleClassName)
                 .AddBaseListTypes(SimpleBaseType(baseInterface))
@@ -35,24 +35,24 @@ namespace Hagar.CodeGenerator
                 .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetGeneratedCodeAttributeSyntax())))
                 .AddMembers(fields)
                 .AddMembers(ctor, serializeMethod, deserializeMethod);
-            if (typeDescription.IsGenericType)
+            if (serializableTypeDescription.IsGenericType)
             {
-                classDeclaration = AddGenericTypeConstraints(classDeclaration, typeDescription);
+                classDeclaration = AddGenericTypeConstraints(classDeclaration, serializableTypeDescription);
             }
 
             return classDeclaration;
         }
 
-        public static string GetSimpleClassName(ITypeDescription type)
+        public static string GetSimpleClassName(ISerializableTypeDescription serializableType)
         {
-            return $"{CodeGenerator.CodeGeneratorName}_Serializer_{type.Name}";
+            return $"{CodeGenerator.CodeGeneratorName}_Serializer_{serializableType.Name}";
         }
 
-        private static ClassDeclarationSyntax AddGenericTypeConstraints(ClassDeclarationSyntax classDeclaration, ITypeDescription type)
+        private static ClassDeclarationSyntax AddGenericTypeConstraints(ClassDeclarationSyntax classDeclaration, ISerializableTypeDescription serializableType)
         {
-            classDeclaration = classDeclaration.WithTypeParameterList(TypeParameterList(SeparatedList(type.TypeParameters.Select(tp => TypeParameter(tp.Name)))));
+            classDeclaration = classDeclaration.WithTypeParameterList(TypeParameterList(SeparatedList(serializableType.TypeParameters.Select(tp => TypeParameter(tp.Name)))));
             var constraints = new List<TypeParameterConstraintSyntax>();
-            foreach (var tp in type.TypeParameters)
+            foreach (var tp in serializableType.TypeParameters)
             {
                 constraints.Clear();
                 if (tp.HasReferenceTypeConstraint)
@@ -129,18 +129,18 @@ namespace Hagar.CodeGenerator
             }
         }
 
-        private static List<FieldDescription> GetFieldDescriptions(ITypeDescription typeDescription, LibraryTypes libraryTypes)
+        private static List<FieldDescription> GetFieldDescriptions(ISerializableTypeDescription serializableTypeDescription, LibraryTypes libraryTypes)
         {
             var fields = new List<FieldDescription>();
-            fields.AddRange(typeDescription.Members.Select(m => GetExpectedType(m.Type)).Distinct().Select(GetTypeDescription));
+            fields.AddRange(serializableTypeDescription.Members.Select(m => GetExpectedType(m.Type)).Distinct().Select(GetTypeDescription));
             
-            if (typeDescription.HasComplexBaseType)
+            if (serializableTypeDescription.HasComplexBaseType)
             {
-                fields.Add(new InjectedFieldDescription(libraryTypes.PartialSerializer.Construct(typeDescription.BaseType).ToTypeSyntax(), BaseTypeSerializerFieldName));
+                fields.Add(new InjectedFieldDescription(libraryTypes.PartialSerializer.Construct(serializableTypeDescription.BaseType).ToTypeSyntax(), BaseTypeSerializerFieldName));
             }
 
             // Add a codec field for any field in the target which does not have a static codec.
-            fields.AddRange(typeDescription.Members
+            fields.AddRange(serializableTypeDescription.Members
                 .Select(m => GetExpectedType(m.Type)).Distinct()
                 .Where(t => !libraryTypes.StaticCodecs.Any(c => c.UnderlyingType.Equals(t)))
                 .Select(GetCodecDescription));
@@ -177,7 +177,7 @@ namespace Hagar.CodeGenerator
         }
 
         private static MemberDeclarationSyntax GenerateSerializeMethod(
-            ITypeDescription typeDescription,
+            ISerializableTypeDescription serializableTypeDescription,
             List<FieldDescription> fieldDescriptions,
             LibraryTypes libraryTypes)
         {
@@ -187,7 +187,7 @@ namespace Hagar.CodeGenerator
             var instanceParam = "instance".ToIdentifierName();
 
             var body = new List<StatementSyntax>();
-            if (typeDescription.HasComplexBaseType)
+            if (serializableTypeDescription.HasComplexBaseType)
             {
                 body.Add(
                     ExpressionStatement(
@@ -199,7 +199,7 @@ namespace Hagar.CodeGenerator
 
             // Order members according to their FieldId, since fields must be serialized in order and FieldIds are serialized as deltas.
             uint previousFieldId = 0;
-            foreach (var member in typeDescription.Members.OrderBy(m => m.FieldId))
+            foreach (var member in serializableTypeDescription.Members.OrderBy(m => m.FieldId))
             {
                 var fieldIdDelta = member.FieldId - previousFieldId;
                 previousFieldId = member.FieldId;
@@ -238,10 +238,10 @@ namespace Hagar.CodeGenerator
             var parameters = new[]
             {
                 Parameter("writer".ToIdentifier()).WithType(libraryTypes.Writer.ToTypeSyntax()).WithModifiers(TokenList(Token(SyntaxKind.RefKeyword))),
-                Parameter("instance".ToIdentifier()).WithType(typeDescription.TypeSyntax)
+                Parameter("instance".ToIdentifier()).WithType(serializableTypeDescription.TypeSyntax)
             };
 
-            if (typeDescription.IsValueType)
+            if (serializableTypeDescription.IsValueType)
             {
                 parameters[1] = parameters[1].WithModifiers(TokenList(Token(SyntaxKind.InKeyword)));
             }
@@ -255,7 +255,7 @@ namespace Hagar.CodeGenerator
         }
 
         private static MemberDeclarationSyntax GenerateDeserializeMethod(
-            ITypeDescription typeDescription,
+            ISerializableTypeDescription serializableTypeDescription,
             List<FieldDescription> fieldDescriptions,
             LibraryTypes libraryTypes)
         {
@@ -276,7 +276,7 @@ namespace Hagar.CodeGenerator
                             .WithInitializer(EqualsValueClause(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0)))))))
             };
 
-            if (typeDescription.HasComplexBaseType)
+            if (serializableTypeDescription.HasComplexBaseType)
             {
                 // C#: this.baseTypeSerializer.Deserialize(ref reader, instance);
                 body.Add(
@@ -295,10 +295,10 @@ namespace Hagar.CodeGenerator
             var parameters = new[]
             {
                 Parameter(readerParam.Identifier).WithType(libraryTypes.Reader.ToTypeSyntax()).WithModifiers(TokenList(Token(SyntaxKind.RefKeyword))),
-                Parameter(instanceParam.Identifier).WithType(typeDescription.TypeSyntax)
+                Parameter(instanceParam.Identifier).WithType(serializableTypeDescription.TypeSyntax)
             };
             
-            if (typeDescription.IsValueType)
+            if (serializableTypeDescription.IsValueType)
             {
                 parameters[1] = parameters[1].WithModifiers(TokenList(Token(SyntaxKind.RefKeyword)));
             }
@@ -342,7 +342,7 @@ namespace Hagar.CodeGenerator
             List<SwitchSectionSyntax> GetSwitchSections()
             {
                 var switchSections = new List<SwitchSectionSyntax>();
-                foreach (var member in typeDescription.Members)
+                foreach (var member in serializableTypeDescription.Members)
                 {
                     // C#: case <fieldId>:
                     var label = CaseSwitchLabel(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(member.FieldId)));

@@ -46,7 +46,7 @@ namespace Hagar.CodeGenerator
         public IPropertySymbol Property { get; }
     }
 
-    internal interface ITypeDescription
+    internal interface ISerializableTypeDescription
     {
         TypeSyntax TypeSyntax { get; }
         bool HasComplexBaseType { get; }
@@ -58,9 +58,28 @@ namespace Hagar.CodeGenerator
         List<IMemberDescription> Members { get; }
     }
 
-    internal class TypeDescription : ITypeDescription
+    internal interface IInvokableInterfaceDescription
     {
-        public TypeDescription(INamedTypeSymbol type, IEnumerable<IMemberDescription> members)
+        INamedTypeSymbol InterfaceType { get; }
+        List<MethodDescription> Methods { get; }
+    }
+
+    internal class InvokableInterfaceDescription : IInvokableInterfaceDescription
+    {
+        public InvokableInterfaceDescription(INamedTypeSymbol interfaceType, IEnumerable<MethodDescription> methods)
+        {
+            this.InterfaceType = interfaceType;
+            this.Methods = methods.ToList();
+        }
+
+        public INamedTypeSymbol InterfaceType { get; }
+
+        public List<MethodDescription> Methods { get; }
+    }
+
+    internal class SerializableTypeDescription : ISerializableTypeDescription
+    {
+        public SerializableTypeDescription(INamedTypeSymbol type, IEnumerable<IMemberDescription> members)
         {
             this.Type = type;
             this.Members = members.ToList();
@@ -111,21 +130,31 @@ namespace Hagar.CodeGenerator
 
         public async Task<CompilationUnitSyntax> GenerateCode(CancellationToken cancellationToken)
         {
+            var namespaceName = "HagarGeneratedCode." + this.compilation.AssemblyName;
+
             // Collect metadata from the compilation.
-            var serializableTypes = await this.GetSerializableTypes(cancellationToken);
+            var metadataModel = await this.GenerateMetadataModel(cancellationToken);
+            var members = new List<MemberDeclarationSyntax>();
+
+            foreach (var type in metadataModel.InvokableInterfaces)
+            {
+                foreach (var method in type.Methods)
+                {
+                    var (invokable, serializableTypeDescription) = InvokableGenerator.Generate(this.compilation, this.libraryTypes, method);
+                    metadataModel.SerializableTypes.Add(serializableTypeDescription);
+                    members.Add(invokable);
+                }
+            }
 
             // Generate code.
-            var members = new List<MemberDeclarationSyntax>();
-            foreach (var type in serializableTypes)
+            foreach (var type in metadataModel.SerializableTypes)
             {
                 // Generate a partial serializer class for each serializable type.
                 members.Add(SerializerGenerator.GenerateSerializer(this.compilation, this.libraryTypes, type));
             }
-
-            var namespaceName = "HagarGeneratedCode." + this.compilation.AssemblyName;
-
+            
             // Generate metadata.
-            var metadataClass = MetadataGenerator.GenerateMetadata(this.compilation, serializableTypes);
+            var metadataClass = MetadataGenerator.GenerateMetadata(this.compilation, metadataModel.SerializableTypes);
             members.Add(metadataClass);
 
             var metadataAttribute = AttributeList()
@@ -144,21 +173,43 @@ namespace Hagar.CodeGenerator
                         .WithUsings(List(new[] {UsingDirective(ParseName("global::Hagar.Codecs")), UsingDirective(ParseName("global::Hagar.GeneratedCodeHelpers")) }))));
         }
 
-        private async Task<List<TypeDescription>> GetSerializableTypes(CancellationToken cancellationToken)
+        private class MetadataModel
         {
-            var results = new List<TypeDescription>(1024);
+            public List<ISerializableTypeDescription> SerializableTypes { get; set; }
+            public List<IInvokableInterfaceDescription> InvokableInterfaces { get; set; }
+        }
+
+        private async Task<MetadataModel> GenerateMetadataModel(CancellationToken cancellationToken)
+        {
+            var metadataModel = new MetadataModel
+            {
+                SerializableTypes = new List<ISerializableTypeDescription>(1024),
+                InvokableInterfaces = new List<IInvokableInterfaceDescription>(1024)
+            };
+
             foreach (var syntaxTree in this.compilation.SyntaxTrees)
             {
                 var semanticModel = this.compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: false);
                 var rootNode = await syntaxTree.GetRootAsync(cancellationToken);
                 foreach (var node in GetTypeDeclarations(rootNode))
                 {
-                    if (!this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateSerializerAttribute)) continue;
-                    results.Add(this.CreateTypeDescription(semanticModel, node));
+                    if (this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateSerializerAttribute))
+                    {
+                        var declared = semanticModel.GetDeclaredSymbol(node);
+                        var typeDescription = new SerializableTypeDescription(declared, this.GetDataMembers(declared));
+                        metadataModel.SerializableTypes.Add(typeDescription);
+                    }
+
+                    if (this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateMethodSerializersAttribute))
+                    {
+                        var declared = semanticModel.GetDeclaredSymbol(node);
+                        var description = new InvokableInterfaceDescription(declared, this.GetMethods(declared));
+                        metadataModel.InvokableInterfaces.Add(description);
+                    }
                 }
             }
 
-            return results;
+            return metadataModel;
         }
 
         private static IEnumerable<TypeDeclarationSyntax> GetTypeDeclarations(SyntaxNode node)
@@ -189,15 +240,8 @@ namespace Hagar.CodeGenerator
             }
         }
 
-        private TypeDescription CreateTypeDescription(SemanticModel semanticModel, TypeDeclarationSyntax typeDecl)
-        {
-            var declared = semanticModel.GetDeclaredSymbol(typeDecl);
-            var typeDescription = new TypeDescription(declared, this.GetMembers(declared));
-            return typeDescription;
-        }
-
-        // Returns descriptions of all fields 
-        private IEnumerable<IMemberDescription> GetMembers(INamedTypeSymbol symbol)
+        // Returns descriptions of all data members (fields and properties) 
+        private IEnumerable<IMemberDescription> GetDataMembers(INamedTypeSymbol symbol)
         {
             foreach (var member in symbol.GetMembers())
             {
@@ -226,8 +270,20 @@ namespace Hagar.CodeGenerator
 #warning add diagnostic: readonly field.
                         continue;
                     }
-                    
+
                     yield return new FieldDescription(id, field);
+                }
+            }
+        }
+
+        // Returns descriptions of all methods 
+        private IEnumerable<MethodDescription> GetMethods(INamedTypeSymbol symbol)
+        {
+            foreach (var member in symbol.GetMembers())
+            {
+                if (member is IMethodSymbol method)
+                {
+                    yield return new MethodDescription(method);
                 }
             }
         }
@@ -239,6 +295,8 @@ namespace Hagar.CodeGenerator
             {
                 case ClassDeclarationSyntax classDecl:
                     return HasAttributeInner(classDecl.AttributeLists);
+                case InterfaceDeclarationSyntax interfaceDecl:
+                    return HasAttributeInner(interfaceDecl.AttributeLists);
                 case StructDeclarationSyntax structDecl:
                     return HasAttributeInner(structDecl.AttributeLists);
                 default:

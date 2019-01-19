@@ -1,8 +1,15 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Hagar;
 
 namespace MyPocos
 {
+    [GenerateMethodSerializers]
+    public interface IMyInvokable
+    {
+        ValueTask<int> Multiply(int a, int b, object c);
+    }
+
     [GenerateSerializer]
     public class SomeClassWithSerialzers
     {
