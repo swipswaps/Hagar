@@ -276,7 +276,7 @@ public abstract class Invokable // : IInvokable
         }
     }
 
-    public sealed partial class Generated_MyInterface_Proxy : IMyInterface
+    public sealed partial class Generated_MyInterface_Proxy : MyProxyBaseClass, IMyInterface
     {
         private ObjectPool<MyImplementation_Multiply_Int_Int_Closure> pool;
 
@@ -301,10 +301,23 @@ public abstract class Invokable // : IInvokable
                 this.pool.Return(request);
             }
         }
+
+        public Generated_MyInterface_Proxy(int x) : base(x)
+        {
+        }
     }
 
+
+    // Copy all non-private ctors from base to generated class
+    // Change protected -> public
     public abstract class MyProxyBaseClass
     {
+        public MyProxyBaseClass(int x)
+        {
+
+        }
+
+        // The only required method is Invoke and it must have this signature.
         protected ValueTask Invoke<TInvokable>(TInvokable invokable) where TInvokable : IInvokable
         {
             return default;

@@ -7,9 +7,11 @@ namespace Hagar.CodeGenerator
 {
     internal class LibraryTypes
     {
+        private readonly Compilation compilation;
+
         public static LibraryTypes FromCompilation(Compilation compilation)
         {
-            return new LibraryTypes
+            return new LibraryTypes(compilation)
             {
                 Byte = compilation.GetSpecialType(SpecialType.System_Byte),
                 PartialSerializer = Type("Hagar.Serializers.IPartialSerializer`1"),
@@ -62,7 +64,21 @@ namespace Hagar.CodeGenerator
                 return result;
             }
         }
-        
+
+        private LibraryTypes(Compilation compilation) => this.compilation = compilation;
+
+        public void SetProxyBaseClass(string metadataName)
+        {
+            var baseClass = this.compilation.GetTypeByMetadataName(metadataName);
+            if (baseClass == null) throw new InvalidOperationException("Cannot find type with metadata name " + metadataName);
+
+
+            this.UserDefinedProxyBaseClass = baseClass;
+            foreach (var member in baseClass.GetMembers("Invoke")) 
+        }
+
+        public INamedTypeSymbol UserDefinedProxyBaseClass { get; private set; }
+
         public INamedTypeSymbol MetadataProviderAttribute { get; private set; }
 
         public INamedTypeSymbol IdAttribute { get; private set; }

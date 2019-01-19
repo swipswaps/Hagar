@@ -10,6 +10,9 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Hagar.CodeGenerator
 {
+    /// <summary>
+    /// Generates RPC stub objects called invokers.
+    /// </summary>
     internal static class InvokableGenerator
     {
         public static (ClassDeclarationSyntax, ISerializableTypeDescription) Generate(Compilation compilation, LibraryTypes libraryTypes, MethodDescription methodDescription)
