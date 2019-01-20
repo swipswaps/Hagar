@@ -196,7 +196,7 @@ namespace Hagar.CodeGenerator
             {
                 var method = methodDescription.Method;
                 return MethodDeclaration(method.ReturnType.ToTypeSyntax(), method.Name)
-                    .AddModifiers(Token(SyntaxKind.PublicKeyword))
+                    .AddModifiers(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.AsyncKeyword))
                     .AddParameterListParameters(method.Parameters.Select(GetParameterSyntax).ToArray())
                     .WithBody(
                         CreateProxyMethodBody(libraryTypes, metadataModel, interfaceDescription, methodDescription));

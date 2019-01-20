@@ -10,15 +10,30 @@ namespace Hagar.CodeGenerator
 {
     internal static class MetadataGenerator
     {
-        public static ClassDeclarationSyntax GenerateMetadata(Compilation compilation, List<ISerializableTypeDescription> serializableTypes)
+        public static ClassDeclarationSyntax GenerateMetadata(Compilation compilation, MetadataModel metadataModel)
         {
             var configParam = "config".ToIdentifierName();
             var addMethod = configParam.Member("Serializers").Member("Add");
             var body = new List<StatementSyntax>();
             body.AddRange(
-                serializableTypes.Select(
+                metadataModel.SerializableTypes.Select(
                     type =>
-                        (StatementSyntax) ExpressionStatement(InvocationExpression(addMethod, ArgumentList(SingletonSeparatedList(Argument(TypeOfExpression(GetPartialSerializerTypeName(type)))))))
+                        (StatementSyntax)ExpressionStatement(
+                            InvocationExpression(
+                                addMethod,
+                                ArgumentList(
+                                    SingletonSeparatedList(
+                                        Argument(TypeOfExpression(GetPartialSerializerTypeName(type)))))))
+                ));
+            body.AddRange(
+                metadataModel.GeneratedInvokables.Values.Select(
+                    type =>
+                        (StatementSyntax)ExpressionStatement(
+                            InvocationExpression(
+                                addMethod,
+                                ArgumentList(
+                                    SingletonSeparatedList(
+                                        Argument(TypeOfExpression(type.TypeSyntax))))))
                 ));
 
             var libraryTypes = LibraryTypes.FromCompilation(compilation);

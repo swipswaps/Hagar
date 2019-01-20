@@ -15,7 +15,11 @@ namespace Hagar.CodeGenerator
     /// </summary>
     internal static class InvokableGenerator
     {
-        public static (ClassDeclarationSyntax, IGeneratedInvokerDescription) Generate(Compilation compilation, LibraryTypes libraryTypes, IInvokableInterfaceDescription interfaceDescription, MethodDescription methodDescription)
+        public static (ClassDeclarationSyntax, IGeneratedInvokerDescription) Generate(
+            Compilation compilation,
+            LibraryTypes libraryTypes,
+            IInvokableInterfaceDescription interfaceDescription,
+            MethodDescription methodDescription)
         {
             var method = methodDescription.Method;
             var generatedClassName = GetSimpleClassName(method);
@@ -25,6 +29,7 @@ namespace Hagar.CodeGenerator
             var ctor = GenerateConstructor(generatedClassName, fieldDescriptions);
 
             var targetField = fieldDescriptions.OfType<TargetFieldDescription>().Single();
+            var resultField = fieldDescriptions.OfType<ResultFieldDescription>().FirstOrDefault();
 
             var classDeclaration = ClassDeclaration(generatedClassName)
                 .AddBaseListTypes(SimpleBaseType(libraryTypes.Invokable.ToTypeSyntax()))
@@ -39,10 +44,9 @@ namespace Hagar.CodeGenerator
                     GenerateGetTargetMethod(libraryTypes, targetField),
                     GenerateResetMethod(libraryTypes, fieldDescriptions),
                     GenerateGetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions),
-                    GenerateSetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions));
+                    GenerateSetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions),
+                    GenerateInvokeMethod(libraryTypes, methodDescription, fieldDescriptions, targetField, resultField));
 
-
-            var resultField = fieldDescriptions.OfType<ResultFieldDescription>().FirstOrDefault();
             if (resultField != null)
             {
                 classDeclaration = classDeclaration.AddMembers(
@@ -55,7 +59,12 @@ namespace Hagar.CodeGenerator
                 classDeclaration = AddGenericTypeConstraints(classDeclaration, method);
             }
 
-            return (classDeclaration, new GeneratedInvokerDescription(interfaceDescription, methodDescription, generatedClassName, fieldDescriptions.OfType<IMemberDescription>().ToList()));
+            return (classDeclaration,
+                new GeneratedInvokerDescription(
+                    interfaceDescription,
+                    methodDescription,
+                    generatedClassName,
+                    fieldDescriptions.OfType<IMemberDescription>().ToList()));
         }
 
         private static MemberDeclarationSyntax GenerateSetTargetMethod(
@@ -165,7 +174,10 @@ namespace Hagar.CodeGenerator
             var body = SwitchStatement(index, new SyntaxList<SwitchSectionSyntax>(cases));
             return MethodDeclaration(type, "GetArgument")
                 .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
-                .WithParameterList(ParameterList(SingletonSeparatedList(Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()))))
+                .WithParameterList(
+                    ParameterList(
+                        SingletonSeparatedList(
+                            Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()))))
                 .WithBody(Block(body))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
         }
@@ -241,17 +253,119 @@ namespace Hagar.CodeGenerator
             var body = SwitchStatement(index, new SyntaxList<SwitchSectionSyntax>(cases));
             return MethodDeclaration(libraryTypes.Void.ToTypeSyntax(), "SetArgument")
                 .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
-                .WithParameterList(ParameterList(SeparatedList(new []
-                    {
-                        Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()),
-                        Parameter(Identifier("value")).WithType(type).WithModifiers(TokenList(Token(SyntaxKind.InKeyword)))
-                    }
-                    )))
+                .WithParameterList(
+                    ParameterList(
+                        SeparatedList(
+                            new[]
+                            {
+                                Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()),
+                                Parameter(Identifier("value"))
+                                    .WithType(type)
+                                    .WithModifiers(TokenList(Token(SyntaxKind.InKeyword)))
+                            }
+                        )))
                 .WithBody(Block(body))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
         }
 
-        private static MemberDeclarationSyntax GenerateResetMethod(LibraryTypes libraryTypes, List<FieldDescription> fields)
+        private static MemberDeclarationSyntax GenerateInvokeMethod(
+            LibraryTypes libraryTypes,
+            MethodDescription method,
+            List<FieldDescription> fields,
+            TargetFieldDescription target,
+            ResultFieldDescription result)
+        {
+            var body = new List<StatementSyntax>();
+
+            var resultTask = IdentifierName("resultTask");
+
+            // C# var resultTask = this.target.{Method}({params});
+            var args = SeparatedList(
+                fields.OfType<MethodParameterFieldDescription>()
+                    .OrderBy(p => p.ParameterOrdinal)
+                    .Select(p => Argument(ThisExpression().Member(p.FieldName))));
+            body.Add(
+                LocalDeclarationStatement(
+                    VariableDeclaration(
+                        ParseTypeName("var"),
+                        SingletonSeparatedList(
+                            VariableDeclarator(resultTask.Identifier)
+                                .WithInitializer(
+                                    EqualsValueClause(
+                                        InvocationExpression(
+                                            ThisExpression().Member(target.FieldName).Member(method.Method.Name),
+                                            ArgumentList(args))))))));
+
+            // C#: if (resultTask.IsCompleted) // Even if it failed.
+            // C#: {
+            // C#:     this.result = resultTask.GetAwaiter().GetResult();
+            // C#:     return default; // default(ValueTask) is a successfully completed ValueTask.
+            // C#: }
+            var synchronousCompletionBody = new List<StatementSyntax>();
+            if (result != null)
+            {
+                synchronousCompletionBody.Add(
+                    ExpressionStatement(
+                        AssignmentExpression(
+                            SyntaxKind.SimpleAssignmentExpression,
+                            ThisExpression().Member(result.FieldName),
+                            InvocationExpression(
+                                InvocationExpression(resultTask.Member("GetAwaiter")).Member("GetResult")))));
+            }
+
+            synchronousCompletionBody.Add(ReturnStatement(DefaultExpression(libraryTypes.ValueTask.ToTypeSyntax())));
+            body.Add(IfStatement(resultTask.Member("IsCompleted"), Block(synchronousCompletionBody)));
+
+            // C#: async ValueTask InvokeAsync(ValueTask<int> asyncValue)
+            // C#: {
+            // C#:     this.result = await asyncValue.ConfigureAwait(false);
+            // C#: }
+            var invokeAsyncParam = IdentifierName("asyncTask");
+            var invokeAsyncBody = new List<StatementSyntax>();
+            var awaitExpression = AwaitExpression(
+                InvocationExpression(
+                    invokeAsyncParam.Member("ConfigureAwait"),
+                    ArgumentList(
+                        SingletonSeparatedList(Argument(LiteralExpression(SyntaxKind.FalseLiteralExpression))))));
+            if (result != null)
+            {
+                invokeAsyncBody.Add(
+                    ExpressionStatement(
+                        AssignmentExpression(
+                            SyntaxKind.SimpleAssignmentExpression,
+                            ThisExpression().Member(result.FieldName),
+                            awaitExpression)));
+            }
+            else
+            {
+                invokeAsyncBody.Add(ExpressionStatement(AwaitExpression(invokeAsyncParam)));
+            }
+
+            var invokeAsync = LocalFunctionStatement(libraryTypes.ValueTask.ToTypeSyntax(), "InvokeAsync")
+                .WithModifiers(TokenList(Token(SyntaxKind.AsyncKeyword)))
+                .WithParameterList(
+                    ParameterList(
+                        SingletonSeparatedList(
+                            Parameter(invokeAsyncParam.Identifier).WithType(method.Method.ReturnType.ToTypeSyntax()))))
+                .WithBody(Block(invokeAsyncBody));
+
+            // C#: return InvokeAsync(resultTask);
+            body.Add(
+                ReturnStatement(
+                    InvocationExpression(
+                        IdentifierName("InvokeAsync"),
+                        ArgumentList(SingletonSeparatedList(Argument(resultTask))))));
+            body.Add(invokeAsync);
+
+            return MethodDeclaration(libraryTypes.ValueTask.ToTypeSyntax(), "Invoke")
+                .WithParameterList(ParameterList())
+                .WithBody(Block(body))
+                .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
+        }
+
+        private static MemberDeclarationSyntax GenerateResetMethod(
+            LibraryTypes libraryTypes,
+            List<FieldDescription> fields)
         {
             var body = new List<StatementSyntax>();
 
@@ -308,9 +422,10 @@ namespace Hagar.CodeGenerator
 
             return PropertyDeclaration(libraryTypes.Object.ToTypeSyntax(), "Result")
                 .WithAccessorList(
-                    AccessorList().AddAccessors(
-                        getter,
-                        setter))
+                    AccessorList()
+                        .AddAccessors(
+                            getter,
+                            setter))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
         }
 
@@ -341,6 +456,7 @@ namespace Hagar.CodeGenerator
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
         }
+
         private static MemberDeclarationSyntax GenerateGetResultProperty(
             LibraryTypes libraryTypes,
             ResultFieldDescription resultField)
@@ -352,7 +468,7 @@ namespace Hagar.CodeGenerator
             var body =
                 CastExpression(
                     type,
-                    ThisExpression().Member(resultField.FieldName));
+                    CastExpression(libraryTypes.Object.ToTypeSyntax(), ThisExpression().Member(resultField.FieldName)));
 
             return MethodDeclaration(type, "GetResult")
                 .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
@@ -395,12 +511,16 @@ namespace Hagar.CodeGenerator
             var args = method.Parameters.Length > 0
                 ? "_" + string.Join("_", method.Parameters.Select(p => p.Type.Name))
                 : string.Empty;
-            return $"{CodeGenerator.CodeGeneratorName}_Invokable_{method.ContainingType.Name}_{method.Name}{typeArgs}{args}";
+            return
+                $"{CodeGenerator.CodeGeneratorName}_Invokable_{method.ContainingType.Name}_{method.Name}{typeArgs}{args}";
         }
 
-        private static ClassDeclarationSyntax AddGenericTypeConstraints(ClassDeclarationSyntax classDeclaration, IMethodSymbol method)
+        private static ClassDeclarationSyntax AddGenericTypeConstraints(
+            ClassDeclarationSyntax classDeclaration,
+            IMethodSymbol method)
         {
-            classDeclaration = classDeclaration.WithTypeParameterList(TypeParameterList(SeparatedList(method.TypeParameters.Select(tp => TypeParameter(tp.Name)))));
+            classDeclaration = classDeclaration.WithTypeParameterList(
+                TypeParameterList(SeparatedList(method.TypeParameters.Select(tp => TypeParameter(tp.Name)))));
             var constraints = new List<TypeParameterConstraintSyntax>();
             foreach (var tp in method.TypeParameters)
             {
@@ -427,14 +547,17 @@ namespace Hagar.CodeGenerator
 
                 if (constraints.Count > 0)
                 {
-                    classDeclaration = classDeclaration.AddConstraintClauses(TypeParameterConstraintClause(tp.Name).AddConstraints(constraints.ToArray()));
+                    classDeclaration = classDeclaration.AddConstraintClauses(
+                        TypeParameterConstraintClause(tp.Name).AddConstraints(constraints.ToArray()));
                 }
             }
 
             return classDeclaration;
         }
 
-        private static MemberDeclarationSyntax[] GetFieldDeclarations(List<FieldDescription> fieldDescriptions, LibraryTypes libraryTypes)
+        private static MemberDeclarationSyntax[] GetFieldDeclarations(
+            List<FieldDescription> fieldDescriptions,
+            LibraryTypes libraryTypes)
         {
             return fieldDescriptions.Select(GetFieldDeclaration).ToArray();
 
@@ -449,25 +572,31 @@ namespace Hagar.CodeGenerator
                 {
                     case ResultFieldDescription _:
                     case MethodParameterFieldDescription _:
-                        field  = field.AddModifiers(Token(SyntaxKind.PublicKeyword));
+                        field = field.AddModifiers(Token(SyntaxKind.PublicKeyword));
                         break;
                 }
 
                 if (!description.IsSerializable)
                 {
-                    field = field.WithAttributeLists(SingletonList(AttributeList().AddAttributes(Attribute(libraryTypes.NonSerializedAttribute.ToNameSyntax()))));
+                    field = field.WithAttributeLists(
+                        SingletonList(
+                            AttributeList()
+                                .AddAttributes(Attribute(libraryTypes.NonSerializedAttribute.ToNameSyntax()))));
                 }
 
                 return field;
             }
         }
 
-        private static ConstructorDeclarationSyntax GenerateConstructor(string simpleClassName, List<FieldDescription> fieldDescriptions)
+        private static ConstructorDeclarationSyntax GenerateConstructor(
+            string simpleClassName,
+            List<FieldDescription> fieldDescriptions)
         {
             var injected = fieldDescriptions.Where(f => f.IsInjected).ToList();
-            var parameters = injected.Select(f => Parameter(f.FieldName.ToIdentifier()).WithType(f.FieldType.ToTypeSyntax()));
+            var parameters = injected.Select(
+                f => Parameter(f.FieldName.ToIdentifier()).WithType(f.FieldType.ToTypeSyntax()));
             var body = injected.Select(
-                f => (StatementSyntax) ExpressionStatement(
+                f => (StatementSyntax)ExpressionStatement(
                     AssignmentExpression(
                         SyntaxKind.SimpleAssignmentExpression,
                         ThisExpression().Member(f.FieldName.ToIdentifierName()),
@@ -480,12 +609,17 @@ namespace Hagar.CodeGenerator
             ExpressionSyntax Unwrapped(ExpressionSyntax expr)
             {
                 return InvocationExpression(
-                    MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("HagarGeneratedCodeHelper"), IdentifierName("UnwrapService")),
-                    ArgumentList(SeparatedList(new [] {Argument(ThisExpression()), Argument(expr)})));
+                    MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName("HagarGeneratedCodeHelper"),
+                        IdentifierName("UnwrapService")),
+                    ArgumentList(SeparatedList(new[] {Argument(ThisExpression()), Argument(expr)})));
             }
         }
 
-        private static List<FieldDescription> GetFieldDescriptions(IMethodSymbol method, IInvokableInterfaceDescription interfaceDescription)
+        private static List<FieldDescription> GetFieldDescriptions(
+            IMethodSymbol method,
+            IInvokableInterfaceDescription interfaceDescription)
         {
             var fields = new List<FieldDescription>();
 
@@ -519,7 +653,7 @@ namespace Hagar.CodeGenerator
                 throw new NotSupportedException($"Cannot serialize pointer type {pointerType.Name}");
             return type;
         }
-        
+
         internal abstract class FieldDescription
         {
             protected FieldDescription(ITypeSymbol fieldType, string fieldName)
@@ -543,10 +677,12 @@ namespace Hagar.CodeGenerator
             public override bool IsInjected => true;
             public override bool IsSerializable => false;
         }
-        
+
         internal class CodecFieldDescription : FieldDescription, ICodecDescription
         {
-            public CodecFieldDescription(ITypeSymbol fieldType, string fieldName, ITypeSymbol underlyingType) : base(fieldType, fieldName)
+            public CodecFieldDescription(ITypeSymbol fieldType, string fieldName, ITypeSymbol underlyingType) : base(
+                fieldType,
+                fieldName)
             {
                 this.UnderlyingType = underlyingType;
             }
@@ -558,7 +694,9 @@ namespace Hagar.CodeGenerator
 
         internal class TypeFieldDescription : FieldDescription
         {
-            public TypeFieldDescription(ITypeSymbol fieldType, string fieldName, ITypeSymbol underlyingType) : base(fieldType, fieldName)
+            public TypeFieldDescription(ITypeSymbol fieldType, string fieldName, ITypeSymbol underlyingType) : base(
+                fieldType,
+                fieldName)
             {
                 this.UnderlyingType = underlyingType;
             }

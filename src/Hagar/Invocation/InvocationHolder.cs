@@ -188,27 +188,27 @@ namespace Hagar.Invocation
         public override void SetTarget<TTargetHolder>(TTargetHolder holder) =>
             this.target = holder.GetTarget<IMyInterface>();
 
-        public override ValueTask Invoke()
-        {
-            var resultTask = this.target.Multiply(this.arg0, this.arg1);
+public override ValueTask Invoke()
+{
+    var resultTask = this.target.Multiply(this.arg0, this.arg1);
 
-            // Avoid allocations and async machinery on the fast path
-            if (resultTask.IsCompleted) // Even if it failed.
-            {
-                this.result = resultTask.GetAwaiter().GetResult();
-                return default; // default(ValueTask) is a successfully completed ValueTask.
-            }
+    // Avoid allocations and async machinery on the fast path
+    if (resultTask.IsCompleted) // Even if it failed.
+    {
+        this.result = resultTask.GetAwaiter().GetResult();
+        return default; // default(ValueTask) is a successfully completed ValueTask.
+    }
 
-            // Allocate only on the slow path (when the call is actually async, not just returning Task.FromResult(x))
-            // We can likely improve perf here, too by using IValueTaskSource and pooling,
-            // but it's an optimization which can come later.
-            return InvokeAsync(resultTask);
+    // Allocate only on the slow path (when the call is actually async, not just returning Task.FromResult(x))
+    // We can likely improve perf here, too by using IValueTaskSource and pooling,
+    // but it's an optimization which can come later.
+    return InvokeAsync(resultTask);
 
-            async ValueTask InvokeAsync(ValueTask<int> asyncValue)
-            {
-                this.result = await asyncValue.ConfigureAwait(false);
-            }
-        }
+    async ValueTask InvokeAsync(ValueTask<int> asyncValue)
+    {
+        this.result = await asyncValue.ConfigureAwait(false);
+    }
+}
 
         //public override void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) => this.resultCodec.WriteField(ref writer, 0, typeof(int), this.result);
 

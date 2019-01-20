@@ -178,7 +178,7 @@ namespace Hagar.CodeGenerator
             }
             
             // Generate metadata.
-            var metadataClass = MetadataGenerator.GenerateMetadata(this.compilation, metadataModel.SerializableTypes);
+            var metadataClass = MetadataGenerator.GenerateMetadata(this.compilation, metadataModel);
             members.Add(metadataClass);
 
             var metadataAttribute = AttributeList()
