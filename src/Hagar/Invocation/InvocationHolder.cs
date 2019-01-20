@@ -73,7 +73,7 @@ namespace Hagar.Invocation
         /// </summary>
         /// <typeparam name="TResult">The result type.</typeparam>
         /// <param name="value">The result value.</param>
-        void SetResult<TResult>(ref TResult value);
+        void SetResult<TResult>(in TResult value);
 
         /// <summary>
         /// Serializes the result to the provided <paramref name="writer"/>.
@@ -110,9 +110,8 @@ namespace Hagar.Invocation
     }
 
     /// <inheritdoc />
-public abstract class Invokable // : IInvokable
+    public abstract class Invokable : IInvokable
     {
-    /*
         /// <inheritdoc />
         public abstract TTarget GetTarget<TTarget>();
 
@@ -126,14 +125,14 @@ public abstract class Invokable // : IInvokable
         public object Result
         {
             get => this.GetResult<object>();
-            set => this.SetResult(ref value);
+            set => this.SetResult(in value);
         }
 
         /// <inheritdoc />
         public abstract TResult GetResult<TResult>();
 
         /// <inheritdoc />
-        public abstract void SetResult<TResult>(ref TResult value);
+        public abstract void SetResult<TResult>(in TResult value);
 
         /// <inheritdoc />
         public abstract void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer)
@@ -150,7 +149,6 @@ public abstract class Invokable // : IInvokable
 
         /// <inheritdoc />
         public abstract void Reset();
-    */
     }
 
 // for experimentation
@@ -163,7 +161,7 @@ public abstract class Invokable // : IInvokable
     {
         public ValueTask<int> Multiply(int a, int b) => new ValueTask<int>(a * b);
     }
-    /*
+
 // Note that we would want to optimize type name serialization for these generated classes.
 // We can generate special type ids for each (note: must support generic methods, which will be expressed as generic IInvokable impls)
 // We can even use an custom serializer (within the Hagar wire protocol) which has its own type encoding and lookup table (eg populated using feature providers)
@@ -176,17 +174,13 @@ public abstract class Invokable // : IInvokable
             this.resultCodec = intCodec;
         }
 
-        [NonSerialized]
-        internal IMyInterface target;
+        [NonSerialized] internal IMyInterface target;
 
-        [NonSerialized]
-        internal int result;
+        [NonSerialized] internal int result;
 
-        [Id(0)]
-        internal int arg0;
+        [Id(0)] internal int arg0;
 
-        [Id(1)]
-        internal int arg1;
+        [Id(1)] internal int arg1;
 
         // Note that in Hagar-generated code this field would have been removed because int is a well-known type and the code generator treats its codec as an intrinsic.
         // So it would be a static class access, Int32Codec. This demonstrates the general case.
@@ -222,7 +216,7 @@ public abstract class Invokable // : IInvokable
 
         public override TResult GetResult<TResult>() => throw new System.NotImplementedException();
 
-        public override void SetResult<TResult>(ref TResult value) => this.result = (int)(object)value;
+        public override void SetResult<TResult>(in TResult value) => this.result = (int)(object)value;
 
 // The remaining members are not strictly necessary but allow supporting features such as call filters, pooling.
 
@@ -312,12 +306,15 @@ public abstract class Invokable // : IInvokable
     // Change protected -> public
     public abstract class MyProxyBaseClass
     {
-        public MyProxyBaseClass(int x)
+        public MyProxyBaseClass(int x, ref Guid g, out string s, in string t)
         {
-
+            s = default;
         }
 
-        // The only required method is Invoke and it must have this signature.
+        public MyProxyBaseClass(int x)
+        { }
+
+    // The only required method is Invoke and it must have this signature.
         protected ValueTask Invoke<TInvokable>(TInvokable invokable) where TInvokable : IInvokable
         {
             return default;

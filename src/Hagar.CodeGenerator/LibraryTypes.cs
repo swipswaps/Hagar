@@ -31,6 +31,12 @@ namespace Hagar.CodeGenerator
                 GenerateSerializerAttribute = Type("Hagar.GenerateSerializerAttribute"),
                 MetadataProviderAttribute = Type("Hagar.Configuration.MetadataProviderAttribute"),
                 IdAttribute = Type("Hagar.IdAttribute"),
+                IInvokable = Type("Hagar.Invocation.IInvokable"),
+                ITargetHolder = Type("Hagar.Invocation.ITargetHolder"),
+                ValueTask = Type("System.Threading.Tasks.ValueTask"),
+                Int32 = compilation.GetSpecialType(SpecialType.System_Int32),
+                NonSerializedAttribute = Type("System.NonSerializedAttribute"),
+                Void = compilation.GetSpecialType(SpecialType.System_Void),
                 StaticCodecs = new List<StaticCodecDescription>
                 {
                     new StaticCodecDescription(compilation.GetSpecialType(SpecialType.System_Boolean), Type("Hagar.Codecs.BoolCodec")),
@@ -65,6 +71,12 @@ namespace Hagar.CodeGenerator
             }
         }
 
+        public INamedTypeSymbol ITargetHolder { get; private set; }
+
+        public INamedTypeSymbol NonSerializedAttribute { get; private set; }
+
+        public INamedTypeSymbol Int32 { get; private set; }
+
         private LibraryTypes(Compilation compilation) => this.compilation = compilation;
 
         public void SetProxyBaseClass(string metadataName)
@@ -72,9 +84,24 @@ namespace Hagar.CodeGenerator
             var baseClass = this.compilation.GetTypeByMetadataName(metadataName);
             if (baseClass == null) throw new InvalidOperationException("Cannot find type with metadata name " + metadataName);
 
+            var found = false;
+            foreach (var member in baseClass.GetMembers("Invoke"))
+            {
+                if (!(member is IMethodSymbol method)) continue;
+                if (method.TypeParameters.Length != 1) continue;
+                if (method.Parameters.Length != 1) continue;
+                if (!method.Parameters[0].Type.Equals(method.TypeParameters[0])) continue;
+                if (!method.TypeParameters[0].ConstraintTypes.Contains(this.IInvokable)) continue;
+                if (!method.ReturnType.Equals(this.ValueTask)) continue;
+                found = true;
+            }
+
+            if (!found)
+            {
+                throw new InvalidOperationException($"Proxy base class {baseClass} does not contain a definition for ValueTask Invoke<T>(T) where T : IInvokable");
+            }
 
             this.UserDefinedProxyBaseClass = baseClass;
-            foreach (var member in baseClass.GetMembers("Invoke")) 
         }
 
         public INamedTypeSymbol UserDefinedProxyBaseClass { get; private set; }
@@ -116,5 +143,8 @@ namespace Hagar.CodeGenerator
         public INamedTypeSymbol Byte { get; private set; }
 
         public INamedTypeSymbol GenerateMethodSerializersAttribute { get; private set; }
+        public INamedTypeSymbol IInvokable { get; private set; }
+        public INamedTypeSymbol ValueTask { get; private set; }
+        public INamedTypeSymbol Void { get; private set; }
     }
 }

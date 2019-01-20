@@ -11,6 +11,16 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace Hagar.CodeGenerator
 {
+    internal class MetadataModel
+    {
+        public List<ISerializableTypeDescription> SerializableTypes { get; } =
+            new List<ISerializableTypeDescription>(1024);
+
+        public List<IInvokableInterfaceDescription> InvokableInterfaces { get; } =
+            new List<IInvokableInterfaceDescription>(1024);
+        public Dictionary<MethodDescription, IGeneratedInvokerDescription> GeneratedInvokables { get; } = new Dictionary<MethodDescription, IGeneratedInvokerDescription>();
+    }
+
     internal interface IMemberDescription
     {
         uint FieldId { get; }
@@ -59,6 +69,11 @@ namespace Hagar.CodeGenerator
         bool IsGenericType { get; }
         ImmutableArray<ITypeParameterSymbol> TypeParameters { get; }
         List<IMemberDescription> Members { get; }
+    }
+
+    internal interface IGeneratedInvokerDescription : ISerializableTypeDescription
+    {
+        IInvokableInterfaceDescription InterfaceDescription { get; }
     }
 
     internal interface IInvokableInterfaceDescription
@@ -117,6 +132,8 @@ namespace Hagar.CodeGenerator
         }
 
         public IMethodSymbol Method { get; }
+
+        public override int GetHashCode() => this.Method.GetHashCode();
     }
 
     public class CodeGenerator
@@ -129,6 +146,7 @@ namespace Hagar.CodeGenerator
         {
             this.compilation = compilation;
             this.libraryTypes = LibraryTypes.FromCompilation(compilation);
+            this.libraryTypes.SetProxyBaseClass("Hagar.Invocation.MyProxyBaseClass");
         }
 
         public async Task<CompilationUnitSyntax> GenerateCode(CancellationToken cancellationToken)
@@ -143,10 +161,13 @@ namespace Hagar.CodeGenerator
             {
                 foreach (var method in type.Methods)
                 {
-                    var (invokable, serializableTypeDescription) = InvokableGenerator.Generate(this.compilation, this.libraryTypes, method);
-                    metadataModel.SerializableTypes.Add(serializableTypeDescription);
+                    var (invokable, generatedInvokerDescription) = InvokableGenerator.Generate(this.compilation, this.libraryTypes, type, method);
+                    metadataModel.SerializableTypes.Add(generatedInvokerDescription);
+                    metadataModel.GeneratedInvokables[method] = generatedInvokerDescription;
                     members.Add(invokable);
                 }
+
+                members.Add(ProxyGenerator.Generate(this.compilation, this.libraryTypes, type, metadataModel));
             }
 
             // Generate code.
@@ -176,19 +197,9 @@ namespace Hagar.CodeGenerator
                         .WithUsings(List(new[] {UsingDirective(ParseName("global::Hagar.Codecs")), UsingDirective(ParseName("global::Hagar.GeneratedCodeHelpers")) }))));
         }
 
-        private class MetadataModel
-        {
-            public List<ISerializableTypeDescription> SerializableTypes { get; set; }
-            public List<IInvokableInterfaceDescription> InvokableInterfaces { get; set; }
-        }
-
         private async Task<MetadataModel> GenerateMetadataModel(CancellationToken cancellationToken)
         {
-            var metadataModel = new MetadataModel
-            {
-                SerializableTypes = new List<ISerializableTypeDescription>(1024),
-                InvokableInterfaces = new List<IInvokableInterfaceDescription>(1024)
-            };
+            var metadataModel = new MetadataModel();
 
             foreach (var syntaxTree in this.compilation.SyntaxTrees)
             {
