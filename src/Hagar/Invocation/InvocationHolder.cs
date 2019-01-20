@@ -80,7 +80,7 @@ namespace Hagar.Invocation
         /// </summary>
         /// <typeparam name="TBufferWriter">The underlying buffer writer type.</typeparam>
         /// <param name="writer">The buffer writer.</param>
-        void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) where TBufferWriter : IBufferWriter<byte>;
+        //void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) where TBufferWriter : IBufferWriter<byte>;
 
         /// <summary>
         /// Gets the number of arguments.
@@ -101,7 +101,7 @@ namespace Hagar.Invocation
         /// <typeparam name="TArgument">The argument type.</typeparam>
         /// <param name="index">The argument index.</param>
         /// <param name="value">The argument value</param>
-        void SetArgument<TArgument>(int index, ref TArgument value);
+        void SetArgument<TArgument>(int index, in TArgument value);
 
         /// <summary>
         /// Resets this instance.
@@ -135,8 +135,7 @@ namespace Hagar.Invocation
         public abstract void SetResult<TResult>(in TResult value);
 
         /// <inheritdoc />
-        public abstract void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer)
-            where TBufferWriter : IBufferWriter<byte>;
+        //public abstract void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) where TBufferWriter : IBufferWriter<byte>;
 
         /// <inheritdoc />
         public abstract int ArgumentCount { get; }
@@ -145,7 +144,7 @@ namespace Hagar.Invocation
         public abstract TArgument GetArgument<TArgument>(int index);
 
         /// <inheritdoc />
-        public abstract void SetArgument<TArgument>(int index, ref TArgument value);
+        public abstract void SetArgument<TArgument>(int index, in TArgument value);
 
         /// <inheritdoc />
         public abstract void Reset();
@@ -211,8 +210,7 @@ namespace Hagar.Invocation
             }
         }
 
-        public override void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) =>
-            this.resultCodec.WriteField(ref writer, 0, typeof(int), this.result);
+        //public override void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) => this.resultCodec.WriteField(ref writer, 0, typeof(int), this.result);
 
         public override TResult GetResult<TResult>() => throw new System.NotImplementedException();
 
@@ -241,7 +239,7 @@ namespace Hagar.Invocation
             ;
         }
 
-        public override void SetArgument<TArgument>(int index, ref TArgument value)
+        public override void SetArgument<TArgument>(int index, in TArgument value)
         {
             switch (index)
             {

@@ -36,7 +36,10 @@ namespace Hagar.CodeGenerator
                 .AddMembers(
                     GenerateGetArgumentCount(libraryTypes, methodDescription),
                     GenerateSetTargetMethod(libraryTypes, interfaceDescription, targetField),
-                    GenerateGetTargetMethod(libraryTypes, targetField));
+                    GenerateGetTargetMethod(libraryTypes, targetField),
+                    GenerateResetMethod(libraryTypes, fieldDescriptions),
+                    GenerateGetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions),
+                    GenerateSetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions));
 
 
             var resultField = fieldDescriptions.OfType<ResultFieldDescription>().FirstOrDefault();
@@ -102,6 +105,172 @@ namespace Hagar.CodeGenerator
                 .WithExpressionBody(ArrowExpressionClause(body))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
+        }
+
+        private static MemberDeclarationSyntax GenerateGetArgumentMethod(
+            LibraryTypes libraryTypes,
+            MethodDescription methodDescription,
+            List<FieldDescription> fields)
+        {
+            var index = IdentifierName("index");
+            var type = IdentifierName("TArgument");
+            var typeToken = Identifier("TArgument");
+
+            var cases = new List<SwitchSectionSyntax>();
+            foreach (var field in fields)
+            {
+                if (!(field is MethodParameterFieldDescription parameter)) continue;
+
+                // C#: case {index}: return (TArgument)(object){field}
+                var label = CaseSwitchLabel(
+                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(parameter.ParameterOrdinal)));
+                cases.Add(
+                    SwitchSection(
+                        SingletonList<SwitchLabelSyntax>(label),
+                        new SyntaxList<StatementSyntax>(
+                            ReturnStatement(
+                                CastExpression(
+                                    type,
+                                    CastExpression(
+                                        libraryTypes.Object.ToTypeSyntax(),
+                                        ThisExpression().Member(parameter.FieldName)))))));
+            }
+
+            // C#: default: return HagarGeneratedCodeHelper.InvokableThrowArgumentOutOfRange<TArgument>(index, {maxArgs})
+            var throwHelperMethod = MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("HagarGeneratedCodeHelper"),
+                GenericName("InvokableThrowArgumentOutOfRange")
+                    .WithTypeArgumentList(
+                        TypeArgumentList(
+                            SingletonSeparatedList<TypeSyntax>(type))));
+            cases.Add(
+                SwitchSection(
+                    SingletonList<SwitchLabelSyntax>(DefaultSwitchLabel()),
+                    new SyntaxList<StatementSyntax>(
+                        ReturnStatement(
+                            InvocationExpression(
+                                throwHelperMethod,
+                                ArgumentList(
+                                    SeparatedList(
+                                        new[]
+                                        {
+                                            Argument(index),
+                                            Argument(
+                                                LiteralExpression(
+                                                    SyntaxKind.NumericLiteralExpression,
+                                                    Literal(
+                                                        Math.Max(0, methodDescription.Method.Parameters.Length - 1))))
+                                        })))))));
+            var body = SwitchStatement(index, new SyntaxList<SwitchSectionSyntax>(cases));
+            return MethodDeclaration(type, "GetArgument")
+                .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
+                .WithParameterList(ParameterList(SingletonSeparatedList(Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()))))
+                .WithBody(Block(body))
+                .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
+        }
+
+        private static MemberDeclarationSyntax GenerateSetArgumentMethod(
+            LibraryTypes libraryTypes,
+            MethodDescription methodDescription,
+            List<FieldDescription> fields)
+        {
+            var index = IdentifierName("index");
+            var value = IdentifierName("value");
+            var type = IdentifierName("TArgument");
+            var typeToken = Identifier("TArgument");
+
+            var cases = new List<SwitchSectionSyntax>();
+            foreach (var field in fields)
+            {
+                if (!(field is MethodParameterFieldDescription parameter)) continue;
+
+                // C#: case {index}: {field} = (TField)(object)value; return;
+                var label = CaseSwitchLabel(
+                    LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(parameter.ParameterOrdinal)));
+                cases.Add(
+                    SwitchSection(
+                        SingletonList<SwitchLabelSyntax>(label),
+                        new SyntaxList<StatementSyntax>(
+                            new StatementSyntax[]
+                            {
+                                ExpressionStatement(
+                                    AssignmentExpression(
+                                        SyntaxKind.SimpleAssignmentExpression,
+                                        ThisExpression().Member(parameter.FieldName),
+                                        CastExpression(
+                                            parameter.FieldType.ToTypeSyntax(),
+                                            CastExpression(
+                                                libraryTypes.Object.ToTypeSyntax(),
+                                                value
+                                            )))),
+                                ReturnStatement()
+                            })));
+            }
+
+            // C#: default: return HagarGeneratedCodeHelper.InvokableThrowArgumentOutOfRange<TArgument>(index, {maxArgs})
+            var maxArgs = Math.Max(0, methodDescription.Method.Parameters.Length - 1);
+            var throwHelperMethod = MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName("HagarGeneratedCodeHelper"),
+                GenericName("InvokableThrowArgumentOutOfRange")
+                    .WithTypeArgumentList(
+                        TypeArgumentList(
+                            SingletonSeparatedList<TypeSyntax>(type))));
+            cases.Add(
+                SwitchSection(
+                    SingletonList<SwitchLabelSyntax>(DefaultSwitchLabel()),
+                    new SyntaxList<StatementSyntax>(
+                        new StatementSyntax[]
+                        {
+                            ExpressionStatement(
+                                InvocationExpression(
+                                    throwHelperMethod,
+                                    ArgumentList(
+                                        SeparatedList(
+                                            new[]
+                                            {
+                                                Argument(index),
+                                                Argument(
+                                                    LiteralExpression(
+                                                        SyntaxKind.NumericLiteralExpression,
+                                                        Literal(maxArgs)))
+                                            })))),
+                            ReturnStatement()
+                        })));
+            var body = SwitchStatement(index, new SyntaxList<SwitchSectionSyntax>(cases));
+            return MethodDeclaration(libraryTypes.Void.ToTypeSyntax(), "SetArgument")
+                .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
+                .WithParameterList(ParameterList(SeparatedList(new []
+                    {
+                        Parameter(Identifier("index")).WithType(libraryTypes.Int32.ToTypeSyntax()),
+                        Parameter(Identifier("value")).WithType(type).WithModifiers(TokenList(Token(SyntaxKind.InKeyword)))
+                    }
+                    )))
+                .WithBody(Block(body))
+                .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)));
+        }
+
+        private static MemberDeclarationSyntax GenerateResetMethod(LibraryTypes libraryTypes, List<FieldDescription> fields)
+        {
+            var body = new List<StatementSyntax>();
+
+            foreach (var field in fields)
+            {
+                if (!field.IsInjected)
+                {
+                    body.Add(
+                        ExpressionStatement(
+                            AssignmentExpression(
+                                SyntaxKind.SimpleAssignmentExpression,
+                                ThisExpression().Member(field.FieldName),
+                                DefaultExpression(field.FieldType.ToTypeSyntax()))));
+                }
+            }
+
+            return MethodDeclaration(libraryTypes.Void.ToTypeSyntax(), "Reset")
+                .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)))
+                .WithBody(Block(body));
         }
 
         private static MemberDeclarationSyntax GenerateGetArgumentCount(
@@ -427,6 +596,8 @@ namespace Hagar.CodeGenerator
                 this.FieldId = fieldId;
                 this.Parameter = parameter;
             }
+
+            public int ParameterOrdinal => this.Parameter.Ordinal;
 
             public override bool IsInjected => false;
             public uint FieldId { get; }
