@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Hagar.CodeGenerator.SyntaxGeneration;
+using Hagar.CodeGenerator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -15,7 +16,7 @@ namespace Hagar.CodeGenerator
     /// </summary>
     internal static class ProxyGenerator
     {
-        public static ClassDeclarationSyntax Generate(
+        public static (ClassDeclarationSyntax, IGeneratedProxyDescription) Generate(
             Compilation compilation,
             LibraryTypes libraryTypes,
             IInvokableInterfaceDescription interfaceDescription,
@@ -29,7 +30,9 @@ namespace Hagar.CodeGenerator
             var proxyMethods = CreateProxyMethods(libraryTypes, interfaceDescription, metadataModel).ToArray();
 
             var classDeclaration = ClassDeclaration(generatedClassName)
-                .AddBaseListTypes(SimpleBaseType(libraryTypes.UserDefinedProxyBaseClass.ToTypeSyntax()))
+                .AddBaseListTypes(
+                    SimpleBaseType(libraryTypes.UserDefinedProxyBaseClass.ToTypeSyntax()),
+                    SimpleBaseType(interfaceDescription.InterfaceType.ToTypeSyntax()))
                 .AddModifiers(Token(SyntaxKind.InternalKeyword), Token(SyntaxKind.SealedKeyword))
                 .AddAttributeLists(
                     AttributeList(SingletonSeparatedList(CodeGenerator.GetGeneratedCodeAttributeSyntax())))
@@ -37,14 +40,23 @@ namespace Hagar.CodeGenerator
                 .AddMembers(ctors)
                 .AddMembers(proxyMethods);
 
-
-
             if (interfaceDescription.InterfaceType.TypeParameters.Length > 0)
             {
                 classDeclaration = AddGenericTypeConstraints(classDeclaration, interfaceDescription.InterfaceType);
             }
 
-            return classDeclaration;
+            return (classDeclaration, new GeneratedProxyDescription(interfaceDescription));
+        }
+
+        private class GeneratedProxyDescription : IGeneratedProxyDescription
+        {
+            public GeneratedProxyDescription(IInvokableInterfaceDescription interfaceDescription)
+            {
+                this.InterfaceDescription = interfaceDescription;
+            }
+
+            public TypeSyntax TypeSyntax => this.GetProxyTypeName();
+            public IInvokableInterfaceDescription InterfaceDescription { get; }
         }
 
         public static string GetSimpleClassName(INamedTypeSymbol type)

@@ -13,24 +13,25 @@ namespace Hagar.CodeGenerator
         public static ClassDeclarationSyntax GenerateMetadata(Compilation compilation, MetadataModel metadataModel)
         {
             var configParam = "config".ToIdentifierName();
-            var addMethod = configParam.Member("Serializers").Member("Add");
+            var addSerializerMethod = configParam.Member("Serializers").Member("Add");
             var body = new List<StatementSyntax>();
             body.AddRange(
                 metadataModel.SerializableTypes.Select(
                     type =>
                         (StatementSyntax)ExpressionStatement(
                             InvocationExpression(
-                                addMethod,
+                                addSerializerMethod,
                                 ArgumentList(
                                     SingletonSeparatedList(
                                         Argument(TypeOfExpression(GetPartialSerializerTypeName(type)))))))
                 ));
+            var addProxyMethod = configParam.Member("InterfaceProxies").Member("Add");
             body.AddRange(
-                metadataModel.GeneratedInvokables.Values.Select(
+                metadataModel.GeneratedProxies.Select(
                     type =>
                         (StatementSyntax)ExpressionStatement(
                             InvocationExpression(
-                                addMethod,
+                                addProxyMethod,
                                 ArgumentList(
                                     SingletonSeparatedList(
                                         Argument(TypeOfExpression(type.TypeSyntax))))))
@@ -68,6 +69,19 @@ namespace Hagar.CodeGenerator
         {
             var genericArity = method.Method.TypeParameters.Length + method.Method.ContainingType.TypeParameters.Length;
             var name = InvokableGenerator.GetSimpleClassName(method.Method);
+            if (genericArity > 0)
+            {
+                name += $"<{new string(',', genericArity - 1)}>";
+            }
+
+            return ParseTypeName(name);
+        }
+
+        public static TypeSyntax GetProxyTypeName(this IGeneratedProxyDescription proxy)
+        {
+            var interfaceType = proxy.InterfaceDescription.InterfaceType;
+            var genericArity = interfaceType.TypeParameters.Length;
+            var name = ProxyGenerator.GetSimpleClassName(interfaceType);
             if (genericArity > 0)
             {
                 name += $"<{new string(',', genericArity - 1)}>";

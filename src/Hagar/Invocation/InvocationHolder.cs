@@ -188,27 +188,27 @@ namespace Hagar.Invocation
         public override void SetTarget<TTargetHolder>(TTargetHolder holder) =>
             this.target = holder.GetTarget<IMyInterface>();
 
-public override ValueTask Invoke()
-{
-    var resultTask = this.target.Multiply(this.arg0, this.arg1);
-
-    // Avoid allocations and async machinery on the fast path
-    if (resultTask.IsCompleted) // Even if it failed.
+    public override ValueTask Invoke()
     {
-        this.result = resultTask.GetAwaiter().GetResult();
-        return default; // default(ValueTask) is a successfully completed ValueTask.
-    }
+        var resultTask = this.target.Multiply(this.arg0, this.arg1);
 
-    // Allocate only on the slow path (when the call is actually async, not just returning Task.FromResult(x))
-    // We can likely improve perf here, too by using IValueTaskSource and pooling,
-    // but it's an optimization which can come later.
-    return InvokeAsync(resultTask);
+        // Avoid allocations and async machinery on the fast path
+        if (resultTask.IsCompleted) // Even if it failed.
+        {
+            this.result = resultTask.GetAwaiter().GetResult();
+            return default; // default(ValueTask) is a successfully completed ValueTask.
+        }
 
-    async ValueTask InvokeAsync(ValueTask<int> asyncValue)
-    {
-        this.result = await asyncValue.ConfigureAwait(false);
+        // Allocate only on the slow path (when the call is actually async, not just returning Task.FromResult(x))
+        // We can likely improve perf here, too by using IValueTaskSource and pooling,
+        // but it's an optimization which can come later.
+        return InvokeAsync(resultTask);
+
+        async ValueTask InvokeAsync(ValueTask<int> asyncValue)
+        {
+            this.result = await asyncValue.ConfigureAwait(false);
+        }
     }
-}
 
         //public override void SerializeResult<TBufferWriter>(ref Writer<TBufferWriter> writer) => this.resultCodec.WriteField(ref writer, 0, typeof(int), this.result);
 
@@ -294,7 +294,7 @@ public override ValueTask Invoke()
             }
         }
 
-        public Generated_MyInterface_Proxy(int x) : base(x)
+        public Generated_MyInterface_Proxy(int x)
         {
         }
     }
@@ -304,17 +304,12 @@ public override ValueTask Invoke()
     // Change protected -> public
     public abstract class MyProxyBaseClass
     {
-        public MyProxyBaseClass(int x, ref Guid g, out string s, in string t)
-        {
-            s = default;
-        }
-
-        public MyProxyBaseClass(int x)
-        { }
+        public List<IInvokable> Invocations { get; } = new List<IInvokable>();
 
     // The only required method is Invoke and it must have this signature.
         protected ValueTask Invoke<TInvokable>(TInvokable invokable) where TInvokable : IInvokable
         {
+            this.Invocations.Add(invokable);
             return default;
         }
     }

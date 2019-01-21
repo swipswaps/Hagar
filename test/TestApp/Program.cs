@@ -1,12 +1,16 @@
-﻿using System;
+using System;
 using System.IO.Pipelines;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Threading.Tasks;
 using Hagar.Serializers;
 using Hagar.Session;
 using Hagar;
 using Hagar.Buffers;
 using Hagar.Codecs;
+using Hagar.Configuration;
+using Hagar.Invocation;
 using Hagar.ISerializable;
 using Hagar.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,8 +20,48 @@ using NodaTime;
 
 namespace TestApp
 {
+    public interface IGrain { }
+    public interface IGrainExtension { }
+
     public class Program
     {
+        public static async Task TestRpc()
+        {
+            Console.WriteLine("Hello World!");
+            var serviceProvider = new ServiceCollection()
+                .AddHagar()
+                .AddSerializers(typeof(SomeClassWithSerialzers).Assembly)
+                .BuildServiceProvider();
+
+            var config = serviceProvider.GetRequiredService<IConfiguration<SerializerConfiguration>>();
+            var proxyType = config.Value.InterfaceProxies.First();
+            var proxy = (IMyInvokable)Activator.CreateInstance(proxyType);
+            await proxy.Multiply(4, 5, "hello");
+            var proxyBase = proxy as MyProxyBaseClass;
+            var invocation = proxyBase.Invocations.First();
+            invocation.SetTarget(new TargetHolder(new MyImplementation()));
+            await invocation.Invoke();
+            invocation.Reset();
+         }
+
+        internal struct TargetHolder : ITargetHolder
+        {
+            private readonly object target;
+
+            public TargetHolder(object target)
+            {
+                this.target = target;
+            }
+
+            public TTarget GetTarget<TTarget>() => (TTarget)this.target;
+
+            public TExtension GetExtension<TExtension>() => throw new NotImplementedException();
+        }
+
+        internal class MyImplementation : IMyInvokable {
+            public ValueTask<int> Multiply(int a, int b, object c) => new ValueTask<int>(a * b);
+        }
+
         public static void TestOne()
         {
             Console.WriteLine("Hello World!");
@@ -75,6 +119,7 @@ namespace TestApp
 
         public static void Main(string[] args)
         {
+            TestRpc();
             TestOne();
             var serviceCollection = new ServiceCollection();
             serviceCollection.AddHagar(configuration =>

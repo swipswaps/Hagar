@@ -19,6 +19,7 @@ namespace Hagar.CodeGenerator
         public List<IInvokableInterfaceDescription> InvokableInterfaces { get; } =
             new List<IInvokableInterfaceDescription>(1024);
         public Dictionary<MethodDescription, IGeneratedInvokerDescription> GeneratedInvokables { get; } = new Dictionary<MethodDescription, IGeneratedInvokerDescription>();
+        public List<IGeneratedProxyDescription> GeneratedProxies { get; } = new List<IGeneratedProxyDescription>(1024);
     }
 
     internal interface IMemberDescription
@@ -80,6 +81,13 @@ namespace Hagar.CodeGenerator
     {
         INamedTypeSymbol InterfaceType { get; }
         List<MethodDescription> Methods { get; }
+    }
+
+
+    internal interface IGeneratedProxyDescription
+    {
+        TypeSyntax TypeSyntax { get; }
+        IInvokableInterfaceDescription InterfaceDescription { get; }
     }
 
     internal class InvokableInterfaceDescription : IInvokableInterfaceDescription
@@ -167,7 +175,9 @@ namespace Hagar.CodeGenerator
                     members.Add(invokable);
                 }
 
-                members.Add(ProxyGenerator.Generate(this.compilation, this.libraryTypes, type, metadataModel));
+                var (proxy, generatedProxyDescription) = ProxyGenerator.Generate(this.compilation, this.libraryTypes, type, metadataModel);
+                metadataModel.GeneratedProxies.Add(generatedProxyDescription);
+                members.Add(proxy);
             }
 
             // Generate code.
