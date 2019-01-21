@@ -8,7 +8,10 @@ namespace Hagar.Buffers
 {
     public ref struct Reader
     {
+        // ReSharper disable FieldCanBeMadeReadOnly.Local
         private ReadOnlySequence<byte> input;
+        // ReSharper restore FieldCanBeMadeReadOnly.Local
+
         private ReadOnlySpan<byte> currentSpan;
         private SequencePosition nextSequencePosition;
         private int bufferPos;

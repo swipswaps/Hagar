@@ -1,6 +1,7 @@
 using System;
 using System.IO.Pipelines;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,15 +38,43 @@ namespace TestApp
                 .BuildServiceProvider();
 
             var config = serviceProvider.GetRequiredService<IConfiguration<SerializerConfiguration>>();
-            var proxyType = config.Value.InterfaceProxies.First();
-            var proxy = (IMyInvokable)Activator.CreateInstance(proxyType);
+            var allProxies = config.Value.InterfaceProxies;
+
+            var proxy = GetProxy<IMyInvokable>();
             await proxy.Multiply(4, 5, "hello");
             var proxyBase = proxy as MyProxyBaseClass;
             var invocation = proxyBase.Invocations.First();
             invocation.SetTarget(new TargetHolder(new MyImplementation()));
             await invocation.Invoke();
             invocation.Reset();
-         }
+
+            var generic = GetProxy<IMyInvokable<int>>();
+            //((MyProxyBaseClass)generic).Invocations.Find()
+            await generic.DoStuff<string>();
+
+            TInterface GetProxy<TInterface>()
+            {
+                if (typeof(TInterface).IsGenericType)
+                {
+                    var unbound = typeof(TInterface).GetGenericTypeDefinition();
+                    var parameters = typeof(TInterface).GetGenericArguments();
+                    foreach (var proxyType in allProxies)
+                    {
+                        if (!proxyType.IsGenericType) continue;
+                        var matching = proxyType.FindInterfaces(
+                            (type, criteria) => type.IsGenericType && type.GetGenericTypeDefinition() == (Type)criteria,
+                            unbound).FirstOrDefault();
+                        if (matching != null)
+                        {
+                            return (TInterface)Activator.CreateInstance(proxyType.GetGenericTypeDefinition().MakeGenericType(parameters));
+                        }
+                    }
+                }
+
+                return (TInterface)Activator.CreateInstance(
+                    allProxies.First(p => typeof(TInterface).IsAssignableFrom(p)));
+            }
+        }
 
         internal struct TargetHolder : ITargetHolder
         {
@@ -61,8 +90,13 @@ namespace TestApp
             public TExtension GetExtension<TExtension>() => throw new NotImplementedException();
         }
 
-        internal class MyImplementation : IMyInvokable {
+        internal class MyImplementation : IMyInvokable
+        {
             public ValueTask<int> Multiply(int a, int b, object c) => new ValueTask<int>(a * b);
+        }
+        internal class MyImplementation<T> : IMyInvokable<T>
+        {
+            public Task DoStuff<TU>() => Task.CompletedTask;
         }
 
         public static void TestOne()
@@ -122,7 +156,8 @@ namespace TestApp
 
         public static void Main(string[] args)
         {
-            TestRpc();
+            TestRpc().GetAwaiter().GetResult();
+            return;
             TestOne();
             var serviceCollection = new ServiceCollection();
             serviceCollection.AddHagar(configuration =>

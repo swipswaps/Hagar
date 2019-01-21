@@ -638,10 +638,23 @@ namespace Hagar.CodeGenerator
 
                 if (!description.IsSerializable)
                 {
-                    field = field.WithAttributeLists(
-                        SingletonList(
+                    field = field.AddAttributeLists(
                             AttributeList()
-                                .AddAttributes(Attribute(libraryTypes.NonSerializedAttribute.ToNameSyntax()))));
+                                .AddAttributes(Attribute(libraryTypes.NonSerializedAttribute.ToNameSyntax())));
+                }
+                else if (description is MethodParameterFieldDescription parameter)
+                {
+                    field = field.AddAttributeLists(
+                        AttributeList()
+                            .AddAttributes(
+                                Attribute(
+                                    libraryTypes.IdAttribute.ToNameSyntax(),
+                                    AttributeArgumentList()
+                                        .AddArguments(
+                                            AttributeArgument(
+                                                LiteralExpression(
+                                                    SyntaxKind.NumericLiteralExpression,
+                                                    Literal(parameter.FieldId)))))));
                 }
 
                 return field;
