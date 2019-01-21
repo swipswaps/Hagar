@@ -20,7 +20,10 @@ using NodaTime;
 
 namespace TestApp
 {
+    [GenerateMethodSerializers(typeof(MyProxyBaseClass))]
     public interface IGrain { }
+
+    [GenerateMethodSerializers(typeof(MyProxyBaseClass), isExtension: true)]
     public interface IGrainExtension { }
 
     public class Program

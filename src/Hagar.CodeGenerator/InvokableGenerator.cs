@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using Hagar.CodeGenerator.SyntaxGeneration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -45,18 +46,16 @@ namespace Hagar.CodeGenerator
                     GenerateResetMethod(libraryTypes, fieldDescriptions),
                     GenerateGetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions),
                     GenerateSetArgumentMethod(libraryTypes, methodDescription, fieldDescriptions),
-                    GenerateInvokeMethod(libraryTypes, methodDescription, fieldDescriptions, targetField, resultField));
-
-            if (resultField != null)
-            {
-                classDeclaration = classDeclaration.AddMembers(
+                    GenerateInvokeMethod(libraryTypes, methodDescription, fieldDescriptions, targetField, resultField),
                     GenerateSetResultProperty(libraryTypes, resultField),
                     GenerateGetResultProperty(libraryTypes, resultField));
-            }
 
-            if (method.TypeParameters.Length > 0)
+            var typeParameters = interfaceDescription.InterfaceType.TypeParameters.Select(tp => (tp, tp.Name))
+                .Concat(method.TypeParameters.Select(tp => (tp, tp.Name)))
+                .ToList();
+            if (typeParameters.Count > 0)
             {
-                classDeclaration = AddGenericTypeConstraints(classDeclaration, method);
+                classDeclaration = AddGenericTypeConstraints(classDeclaration, typeParameters);
             }
 
             return (classDeclaration,
@@ -81,7 +80,7 @@ namespace Hagar.CodeGenerator
                     MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
                         holder,
-                        GenericName("GetTarget")
+                        GenericName(interfaceDescription.IsExtension ? "GetExtension" : "GetTarget")
                             .WithTypeArgumentList(
                                 TypeArgumentList(
                                     SingletonSeparatedList(interfaceDescription.InterfaceType.ToTypeSyntax())))))
@@ -284,6 +283,23 @@ namespace Hagar.CodeGenerator
                 fields.OfType<MethodParameterFieldDescription>()
                     .OrderBy(p => p.ParameterOrdinal)
                     .Select(p => Argument(ThisExpression().Member(p.FieldName))));
+            ExpressionSyntax methodCall;
+            if (method.Method.TypeParameters.Length > 0)
+            {
+                methodCall = MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    ThisExpression().Member(target.FieldName),
+                    GenericName(
+                        Identifier(method.Method.Name),
+                        TypeArgumentList(
+                            SeparatedList<TypeSyntax>(
+                                method.Method.TypeParameters.Select(p => IdentifierName(p.Name))))));
+            }
+            else
+            {
+                methodCall = ThisExpression().Member(target.FieldName).Member(method.Method.Name);
+            }
+            
             body.Add(
                 LocalDeclarationStatement(
                     VariableDeclaration(
@@ -293,7 +309,7 @@ namespace Hagar.CodeGenerator
                                 .WithInitializer(
                                     EqualsValueClause(
                                         InvocationExpression(
-                                            ThisExpression().Member(target.FieldName).Member(method.Method.Name),
+                                            methodCall,
                                             ArgumentList(args))))))));
 
             // C#: if (resultTask.IsCompleted) // Even if it failed.
@@ -437,12 +453,22 @@ namespace Hagar.CodeGenerator
             var type = IdentifierName("TResult");
             var typeToken = Identifier("TResult");
 
-            var setResult = AssignmentExpression(
-                SyntaxKind.SimpleAssignmentExpression,
-                ThisExpression().Member(resultField.FieldName),
-                CastExpression(
-                    resultField.FieldType.ToTypeSyntax(),
-                    CastExpression(libraryTypes.Object.ToTypeSyntax(), IdentifierName("value"))));
+            ExpressionSyntax body;
+            if (resultField != null)
+            {
+                body = AssignmentExpression(
+                    SyntaxKind.SimpleAssignmentExpression,
+                    ThisExpression().Member(resultField.FieldName),
+                    CastExpression(
+                        resultField.FieldType.ToTypeSyntax(),
+                        CastExpression(libraryTypes.Object.ToTypeSyntax(), IdentifierName("value"))));
+            }
+            else
+            {
+                body = ThrowExpression(
+                    ObjectCreationExpression(libraryTypes.InvalidOperationException.ToTypeSyntax())
+                        .WithArgumentList(ArgumentList(SingletonSeparatedList(Argument("Method does not have a return value.".GetLiteralExpression())))));
+            }
 
             return MethodDeclaration(libraryTypes.Void.ToTypeSyntax(), "SetResult")
                 .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
@@ -452,7 +478,7 @@ namespace Hagar.CodeGenerator
                             Parameter(Identifier("value"))
                                 .WithType(type)
                                 .WithModifiers(TokenList(Token(SyntaxKind.InKeyword))))))
-                .WithExpressionBody(ArrowExpressionClause(setResult))
+                .WithExpressionBody(ArrowExpressionClause(body))
                 .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword), Token(SyntaxKind.OverrideKeyword)))
                 .WithSemicolonToken(Token(SyntaxKind.SemicolonToken));
         }
@@ -465,10 +491,22 @@ namespace Hagar.CodeGenerator
             var type = IdentifierName("TResult");
             var typeToken = Identifier("TResult");
 
-            var body =
-                CastExpression(
+            ExpressionSyntax body;
+            if (resultField != null)
+            {
+                body = CastExpression(
                     type,
                     CastExpression(libraryTypes.Object.ToTypeSyntax(), ThisExpression().Member(resultField.FieldName)));
+            }
+            else
+            {
+                body = ThrowExpression(
+                    ObjectCreationExpression(libraryTypes.InvalidOperationException.ToTypeSyntax())
+                        .WithArgumentList(
+                            ArgumentList(
+                                SingletonSeparatedList(
+                                    Argument("Method does not have a return value.".GetLiteralExpression())))));
+            }
 
             return MethodDeclaration(type, "GetResult")
                 .WithTypeParameterList(TypeParameterList(SingletonSeparatedList(TypeParameter(typeToken))))
@@ -492,15 +530,37 @@ namespace Hagar.CodeGenerator
                 this.methodDescription = methodDescription;
                 this.Name = generatedClassName;
                 this.Members = members;
+
+                this.TypeParameters = interfaceDescription.InterfaceType.TypeParameters
+                    .Concat(this.methodDescription.Method.TypeParameters)
+                    .ToImmutableArray();
             }
 
-            public TypeSyntax TypeSyntax => this.methodDescription.GetInvokableTypeName();
+            public TypeSyntax TypeSyntax
+            {
+                get
+                {
+                    var name = GetSimpleClassName(this.methodDescription.Method);
+
+                    if (this.TypeParameters.Length > 0)
+                    {
+                        return GenericName(
+                            Identifier(name),
+                            TypeArgumentList(
+                                SeparatedList<TypeSyntax>(this.TypeParameters.Select(p => IdentifierName(p.Name)))));
+                    }
+
+                    return IdentifierName(name);
+                }
+            }
+
+            public TypeSyntax UnboundTypeSyntax => this.methodDescription.GetInvokableTypeName();
             public bool HasComplexBaseType => false;
             public INamedTypeSymbol BaseType => throw new NotImplementedException();
             public string Name { get; }
             public bool IsValueType => false;
             public bool IsGenericType => this.methodDescription.Method.IsGenericMethod;
-            public ImmutableArray<ITypeParameterSymbol> TypeParameters => this.methodDescription.Method.TypeParameters;
+            public ImmutableArray<ITypeParameterSymbol> TypeParameters { get; }
             public List<IMemberDescription> Members { get; }
             public IInvokableInterfaceDescription InterfaceDescription { get; }
         }
@@ -517,12 +577,12 @@ namespace Hagar.CodeGenerator
 
         private static ClassDeclarationSyntax AddGenericTypeConstraints(
             ClassDeclarationSyntax classDeclaration,
-            IMethodSymbol method)
+            List<(ITypeParameterSymbol, string)> typeParameters)
         {
             classDeclaration = classDeclaration.WithTypeParameterList(
-                TypeParameterList(SeparatedList(method.TypeParameters.Select(tp => TypeParameter(tp.Name)))));
+                TypeParameterList(SeparatedList(typeParameters.Select(tp => TypeParameter(tp.Item2)))));
             var constraints = new List<TypeParameterConstraintSyntax>();
-            foreach (var tp in method.TypeParameters)
+            foreach (var (tp, _) in typeParameters)
             {
                 constraints.Clear();
                 if (tp.HasReferenceTypeConstraint)
@@ -638,20 +698,6 @@ namespace Hagar.CodeGenerator
             fields.Add(new TargetFieldDescription(interfaceDescription.InterfaceType));
 
             return fields;
-        }
-
-        /// <summary>
-        /// Returns the "expected" type for <paramref name="type"/> which is used for selecting the correct codec.
-        /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        private static ITypeSymbol GetExpectedType(ITypeSymbol type)
-        {
-            if (type is IArrayTypeSymbol)
-                return type;
-            if (type is IPointerTypeSymbol pointerType)
-                throw new NotSupportedException($"Cannot serialize pointer type {pointerType.Name}");
-            return type;
         }
 
         internal abstract class FieldDescription

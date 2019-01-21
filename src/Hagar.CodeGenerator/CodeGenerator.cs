@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -63,6 +64,7 @@ namespace Hagar.CodeGenerator
     internal interface ISerializableTypeDescription
     {
         TypeSyntax TypeSyntax { get; }
+        TypeSyntax UnboundTypeSyntax { get; }
         bool HasComplexBaseType { get; }
         INamedTypeSymbol BaseType { get; }
         string Name { get; }
@@ -81,6 +83,8 @@ namespace Hagar.CodeGenerator
     {
         INamedTypeSymbol InterfaceType { get; }
         List<MethodDescription> Methods { get; }
+        INamedTypeSymbol ProxyBaseType { get; }
+        bool IsExtension { get; }
     }
 
 
@@ -92,15 +96,45 @@ namespace Hagar.CodeGenerator
 
     internal class InvokableInterfaceDescription : IInvokableInterfaceDescription
     {
-        public InvokableInterfaceDescription(INamedTypeSymbol interfaceType, IEnumerable<MethodDescription> methods)
+        public InvokableInterfaceDescription(
+            LibraryTypes libraryTypes,
+            INamedTypeSymbol interfaceType,
+            IEnumerable<MethodDescription> methods,
+            INamedTypeSymbol proxyBaseType,
+            bool isExtension)
         {
+            this.ValidateBaseClass(libraryTypes, proxyBaseType);
             this.InterfaceType = interfaceType;
+            this.ProxyBaseType = proxyBaseType;
+            this.IsExtension = isExtension;
             this.Methods = methods.ToList();
         }
 
-        public INamedTypeSymbol InterfaceType { get; }
+        void ValidateBaseClass(LibraryTypes l, INamedTypeSymbol baseClass)
+        {
+            var found = false;
+            foreach (var member in baseClass.GetMembers("Invoke"))
+            {
+                if (!(member is IMethodSymbol method)) continue;
+                if (method.TypeParameters.Length != 1) continue;
+                if (method.Parameters.Length != 1) continue;
+                if (!method.Parameters[0].Type.Equals(method.TypeParameters[0])) continue;
+                if (!method.TypeParameters[0].ConstraintTypes.Contains(l.IInvokable)) continue;
+                if (!method.ReturnType.Equals(l.ValueTask)) continue;
+                found = true;
+            }
 
+            if (!found)
+            {
+                throw new InvalidOperationException(
+                    $"Proxy base class {baseClass} does not contain a definition for ValueTask Invoke<T>(T) where T : IInvokable");
+            }
+        }
+
+        public INamedTypeSymbol InterfaceType { get; }
         public List<MethodDescription> Methods { get; }
+        public INamedTypeSymbol ProxyBaseType { get; }
+        public bool IsExtension { get; }
     }
 
     internal class SerializableTypeDescription : ISerializableTypeDescription
@@ -114,6 +148,7 @@ namespace Hagar.CodeGenerator
         private INamedTypeSymbol Type { get; }
 
         public TypeSyntax TypeSyntax => this.Type.ToTypeSyntax();
+        public TypeSyntax UnboundTypeSyntax => this.Type.ToTypeSyntax();
 
         public bool HasComplexBaseType => !this.IsValueType &&
                                           this.Type.BaseType != null &&
@@ -154,7 +189,6 @@ namespace Hagar.CodeGenerator
         {
             this.compilation = compilation;
             this.libraryTypes = LibraryTypes.FromCompilation(compilation);
-            this.libraryTypes.SetProxyBaseClass("Hagar.Invocation.MyProxyBaseClass");
         }
 
         public async Task<CompilationUnitSyntax> GenerateCode(CancellationToken cancellationToken)
@@ -217,18 +251,32 @@ namespace Hagar.CodeGenerator
                 var rootNode = await syntaxTree.GetRootAsync(cancellationToken);
                 foreach (var node in GetTypeDeclarations(rootNode))
                 {
-                    if (this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateSerializerAttribute))
+                    var symbol = semanticModel.GetDeclaredSymbol(node);
+
+                    if (this.HasAttribute(symbol, this.libraryTypes.GenerateSerializerAttribute, inherited: true) != null)
                     {
-                        var declared = semanticModel.GetDeclaredSymbol(node);
-                        var typeDescription = new SerializableTypeDescription(declared, this.GetDataMembers(declared));
+                        var typeDescription = new SerializableTypeDescription(symbol, this.GetDataMembers(symbol));
                         metadataModel.SerializableTypes.Add(typeDescription);
                     }
 
-                    if (this.HasAttribute(node, semanticModel, this.libraryTypes.GenerateMethodSerializersAttribute))
+                    if (symbol.TypeKind == TypeKind.Interface)
                     {
-                        var declared = semanticModel.GetDeclaredSymbol(node);
-                        var description = new InvokableInterfaceDescription(declared, this.GetMethods(declared));
-                        metadataModel.InvokableInterfaces.Add(description);
+                        var attribute = this.HasAttribute(
+                            symbol,
+                            this.libraryTypes.GenerateMethodSerializersAttribute,
+                            inherited: true);
+                        if (attribute != null)
+                        {
+                            var baseClass = (INamedTypeSymbol)attribute.ConstructorArguments[0].Value;
+                            var isExtension = (bool)attribute.ConstructorArguments[1].Value;
+                            var description = new InvokableInterfaceDescription(
+                                this.libraryTypes,
+                                symbol,
+                                this.GetMethods(symbol),
+                                baseClass,
+                                isExtension);
+                            metadataModel.InvokableInterfaces.Add(description);
+                        }
                     }
                 }
             }
@@ -313,27 +361,33 @@ namespace Hagar.CodeGenerator
         }
 
         // Returns true if the type declaration has the specified attribute.
-        private bool HasAttribute(TypeDeclarationSyntax node, SemanticModel model, ISymbol attributeType)
+        private AttributeData HasAttribute(INamedTypeSymbol symbol, ISymbol attributeType, bool inherited = false)
         {
-            switch (node)
+            foreach (var attribute in symbol.GetAttributes())
             {
-                case ClassDeclarationSyntax classDecl:
-                    return HasAttributeInner(classDecl.AttributeLists);
-                case InterfaceDeclarationSyntax interfaceDecl:
-                    return HasAttributeInner(interfaceDecl.AttributeLists);
-                case StructDeclarationSyntax structDecl:
-                    return HasAttributeInner(structDecl.AttributeLists);
-                default:
-                    return false;
+                if (attribute.AttributeClass.Equals(attributeType)) return attribute;
             }
 
-            bool HasAttributeInner(SyntaxList<AttributeListSyntax> attributeLists)
+            if (inherited)
             {
-                return attributeLists
-                    .SelectMany(list => list.Attributes)
-                    .Select(attr => model.GetTypeInfo(attr).ConvertedType)
-                    .Any(attrType => attrType.Equals(attributeType));
+                foreach (var iface in symbol.AllInterfaces)
+                {
+                    foreach (var attribute in iface.GetAttributes())
+                    {
+                        if (attribute.AttributeClass.Equals(attributeType)) return attribute;
+                    }
+                }
+
+                while ((symbol = symbol.BaseType) != null)
+                {
+                    foreach (var attribute in symbol.GetAttributes())
+                    {
+                        if (attribute.AttributeClass.Equals(attributeType)) return attribute;
+                    }
+                }
             }
+
+            return null;
         }
 
         internal static AttributeSyntax GetGeneratedCodeAttributeSyntax()
