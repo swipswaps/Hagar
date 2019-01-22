@@ -9,18 +9,14 @@ namespace TestRpc.Runtime
         [NonSerialized]
         private readonly IRuntimeClient runtimeClient;
 
-        protected ProxyBase(TargetId id, IRuntimeClient runtimeClient)
+        protected ProxyBase(ActivationId id, IRuntimeClient runtimeClient)
         {
             this.runtimeClient = runtimeClient;
-            this.TargetId = id;
+            this.ActivationId = id;
         }
 
-        public TargetId TargetId { get; }
+        public ActivationId ActivationId { get; }
 
-        protected async ValueTask Invoke<T>(T request) where T : IInvokable
-        {
-            var result = await this.runtimeClient.SendRequest(this.TargetId, request);
-            request.Result = result;
-        }
+        protected ValueTask Invoke<T>(T request) where T : IInvokable => this.runtimeClient.SendRequest(this.ActivationId, request);
     }
 }

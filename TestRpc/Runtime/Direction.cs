@@ -1,11 +1,11 @@
+using System;
 using Hagar;
 
 namespace TestRpc.Runtime
 {
-    [GenerateSerializer]
-    public enum Direction
+    public static class Direction
     {
-        Request,
-        Response
+        public const int Request = 0;
+        public const int Response = 1;
     }
 }
