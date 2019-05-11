@@ -1,8 +1,9 @@
 using System;
 using System.Runtime.CompilerServices;
 
-#if NETCOREAPP2_1
+#if NETCOREAPP
 using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics;
 #endif
 
 namespace Hagar.Utilities
@@ -50,7 +51,7 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountSetBits(uint x)
         {
-#if NETCOREAPP2_1
+#if NETCOREAPP
             if (Popcnt.IsSupported)
             {
                 return (int)Popcnt.PopCount(x);
@@ -67,7 +68,7 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountLeadingZeros(uint x)
         {
-#if NETCOREAPP2_1
+#if NETCOREAPP
             if (Lzcnt.IsSupported)
             {
                 return (int)Lzcnt.LeadingZeroCount(x);
@@ -84,10 +85,10 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int CountLeadingZeros(ulong i)
         {
-#if NETCOREAPP2_1
-            if (Lzcnt.IsSupported)
+#if NETCOREAPP
+            if (Lzcnt.X64.IsSupported)
             {
-                return (int)Lzcnt.LeadingZeroCount(i);
+                return (int)Lzcnt.X64.LeadingZeroCount(i);
             }
 #endif
             if (i == 0) return 64;
@@ -105,7 +106,7 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountRequiredBytes32(uint x)
         {
-#if NETCOREAPP2_1
+#if NETCOREAPP
             if (Lzcnt.IsSupported)
             {
                 return (int)((32 + 6 - Lzcnt.LeadingZeroCount(x | 1)) / 7);
@@ -118,7 +119,7 @@ namespace Hagar.Utilities
                 if (x <= 0b00000000_00011111_11111111_11111111) return 3;
                 if (x <= 0b00001111_11111111_11111111_11111111) return 4;
                 return 5;
-#if NETCOREAPP2_1
+#if NETCOREAPP
             }
 #endif
         }
@@ -126,10 +127,10 @@ namespace Hagar.Utilities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CountRequiredBytes64(ulong x)
         {
-#if NETCOREAPP2_1
-            if (Lzcnt.IsSupported)
+#if NETCOREAPP
+            if (Lzcnt.X64.IsSupported)
             {
-                return (int)((64 + 6 - Lzcnt.LeadingZeroCount((x | 1 | (x >> 1)) & 0x7FFF_FFFF_FFFF_FFFF)) / 7);
+                return (int)((64 + 6 - Lzcnt.X64.LeadingZeroCount((x | 1 | (x >> 1)) & 0x7FFF_FFFF_FFFF_FFFF)) / 7);
             }
             else
             {
@@ -143,7 +144,7 @@ namespace Hagar.Utilities
                 if (x <= 0b00000000_00000001_11111111_11111111_11111111_11111111_11111111_11111111) return 7;
                 if (x <= 0b00000000_11111111_11111111_11111111_11111111_11111111_11111111_11111111) return 8;
                 return 9;
-#if NETCOREAPP2_1
+#if NETCOREAPP
             }
 #endif
         }
