@@ -7,12 +7,12 @@ namespace Hagar.Codecs
 {
     public sealed class TimeSpanCodec : IFieldCodec<TimeSpan>
     {
-        void IFieldCodec<TimeSpan>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TimeSpan value)
+        void IFieldCodec<TimeSpan>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TimeSpan value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TimeSpan value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TimeSpan value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(TimeSpan), WireType.Fixed64);

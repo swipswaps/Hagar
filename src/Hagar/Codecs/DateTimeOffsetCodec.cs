@@ -7,12 +7,12 @@ namespace Hagar.Codecs
 {
     public sealed class DateTimeOffsetCodec : IFieldCodec<DateTimeOffset>
     {
-        void IFieldCodec<DateTimeOffset>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, DateTimeOffset value)
+        void IFieldCodec<DateTimeOffset>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, DateTimeOffset value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, DateTimeOffset value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, DateTimeOffset value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(DateTimeOffset), WireType.TagDelimited);
@@ -31,7 +31,7 @@ namespace Hagar.Codecs
             ReferenceCodec.MarkValueField(reader.Session);
             if (field.WireType != WireType.TagDelimited) ThrowUnsupportedWireTypeException(field);
 
-            uint fieldId = 0;
+            int fieldId = 0;
             TimeSpan offset = default;
             DateTime dateTime = default;
             while (true)

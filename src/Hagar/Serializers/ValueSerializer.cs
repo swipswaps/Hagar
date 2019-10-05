@@ -20,7 +20,7 @@ namespace Hagar.Serializers
             this.serializer = serializer;
         }
 
-        void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TField value)
+        void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TField value)
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteStartObject(fieldIdDelta, expectedType, CodecFieldType);

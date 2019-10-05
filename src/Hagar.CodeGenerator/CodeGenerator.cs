@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -195,7 +196,7 @@ namespace Hagar.CodeGenerator
                 }
             }
 
-            var nextFieldId = 0U;
+            ushort nextFieldId = 0;
             foreach (var member in symbol.GetMembers().OrderBy(m => m.MetadataName))
             {
                 // Only consider fields and properties.
@@ -206,11 +207,21 @@ namespace Hagar.CodeGenerator
                     continue;
                 }
 
-                uint? GetId(ISymbol memberSymbol)
+                ushort? GetId(ISymbol memberSymbol)
                 {
                     var idAttr = memberSymbol.GetAttributes().FirstOrDefault(attr => this.libraryTypes.IdAttributeTypes.Any(t => t.Equals(attr.AttributeClass)));
                     if (idAttr is null) return null;
-                    var id = (uint)idAttr.ConstructorArguments.First().Value;
+                    var rawId = idAttr.ConstructorArguments.First().Value;
+                    var id = rawId switch
+                    {
+                        short value => (ushort)value,
+                        ushort value => value,
+                        int value => (ushort)value,
+                        uint value => (ushort)value,
+                        long value => (ushort)value,
+                        ulong value => (ushort)value,
+                        _ => throw new InvalidCastException($"Cannot cast id '{rawId}' of type '{rawId.GetType()}' to {typeof(ushort)}")
+                    };
                     return id;
                 }
 

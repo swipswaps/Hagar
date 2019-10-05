@@ -29,12 +29,12 @@ namespace Hagar.Codecs
             return specificSerializer.ReadValue(ref reader, field);
         }
 
-        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value)
+        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value) where TBufferWriter : IBufferWriter<byte>
         {
             var fieldType = value?.GetType();
             if (fieldType is null || fieldType == ObjectType)

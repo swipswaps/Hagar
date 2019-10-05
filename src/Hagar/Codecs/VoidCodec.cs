@@ -6,7 +6,7 @@ namespace Hagar.Codecs
 {
     public sealed class VoidCodec : IFieldCodec<object>
     {
-        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value)
+        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value)
         {
             if (!ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value))
             {

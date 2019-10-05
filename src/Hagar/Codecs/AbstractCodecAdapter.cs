@@ -24,7 +24,7 @@ namespace Hagar.Codecs
         /// <inheritdoc />
         public void WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             TConcrete value) where TBufferWriter : IBufferWriter<byte> =>
             this.codec.WriteField(ref writer, fieldIdDelta, expectedType, value);

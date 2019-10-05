@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 using Hagar.Buffers;
 using Hagar.Codecs;
@@ -26,7 +26,7 @@ namespace Hagar.Json
             this.isSupportedFunc = isSupportedFunc ?? (_ => true);
         }
 
-        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value)
+        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value)
         {
             if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
             var result = JsonConvert.SerializeObject(value, this.settings);

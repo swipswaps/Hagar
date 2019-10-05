@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
@@ -18,7 +18,7 @@ namespace Hagar.Codecs
         }
 
         void IFieldCodec<KeyValuePair<TKey, TValue>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             KeyValuePair<TKey, TValue> value)
         {
@@ -38,7 +38,7 @@ namespace Hagar.Codecs
             ReferenceCodec.MarkValueField(reader.Session);
             var key = default(TKey);
             var value = default(TValue);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();

@@ -13,7 +13,7 @@ namespace Hagar.ISerializable
 
         [SecurityCritical]
         public void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             SerializationEntrySurrogate value) where TBufferWriter : IBufferWriter<byte>
         {
@@ -30,7 +30,7 @@ namespace Hagar.ISerializable
         {
             ReferenceCodec.MarkValueField(reader.Session);
             var result = new SerializationEntrySurrogate();
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();

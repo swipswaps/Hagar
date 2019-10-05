@@ -8,14 +8,14 @@ namespace Hagar.Codecs
     public sealed class FloatCodec : TypedCodecBase<float, FloatCodec>, IFieldCodec<float>
     {
         void IFieldCodec<float>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             float value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, float value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, float value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(float), WireType.Fixed32);
@@ -67,14 +67,14 @@ namespace Hagar.Codecs
     public sealed class DoubleCodec : TypedCodecBase<double, DoubleCodec>, IFieldCodec<double>
     {
         void IFieldCodec<double>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             double value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, double value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, double value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(double), WireType.Fixed64);
@@ -111,12 +111,12 @@ namespace Hagar.Codecs
 
     public sealed class DecimalCodec : TypedCodecBase<decimal, DecimalCodec>, IFieldCodec<decimal>
     {
-        void IFieldCodec<decimal>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, decimal value)
+        void IFieldCodec<decimal>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, decimal value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, decimal value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, decimal value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(decimal), WireType.Fixed128);

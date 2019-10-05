@@ -307,7 +307,7 @@ namespace Hagar.UnitTests
 
             public void Deserialize(ref Reader reader, SubType obj)
             {
-                uint fieldId = 0;
+                int fieldId = 0;
                 this.baseTypeSerializer.Deserialize(ref reader, obj);
                 while (true)
                 {
@@ -343,7 +343,7 @@ namespace Hagar.UnitTests
 
             public void Deserialize(ref Reader reader, BaseType obj)
             {
-                uint fieldId = 0;
+                int fieldId = 0;
                 while (true)
                 {
                     var header = reader.ReadFieldHeader();

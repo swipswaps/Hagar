@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Hagar.Buffers;
 using Hagar.GeneratedCodeHelpers;
 using Hagar.WireProtocol;
@@ -7,7 +7,7 @@ namespace Hagar.Codecs
 {
     public sealed class ValueTupleCodec : IFieldCodec<ValueTuple>
     {
-        void IFieldCodec<ValueTuple>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, ValueTuple value)
+        void IFieldCodec<ValueTuple>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, ValueTuple value)
         {
             ReferenceCodec.MarkValueField(writer.Session);
             writer.WriteFieldHeader(fieldIdDelta, expectedType, value.GetType(), WireType.VarInt);
@@ -39,7 +39,7 @@ namespace Hagar.Codecs
 
         void IFieldCodec<ValueTuple<T>>.WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             ValueTuple<T> value)
         {
@@ -57,7 +57,7 @@ namespace Hagar.Codecs
 
             ReferenceCodec.MarkValueField(reader.Session);
             var item1 = default(T);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -94,7 +94,7 @@ namespace Hagar.Codecs
 
         void IFieldCodec<ValueTuple<T1, T2>>.WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2) value)
         {
@@ -114,7 +114,7 @@ namespace Hagar.Codecs
             ReferenceCodec.MarkValueField(reader.Session);
             var item1 = default(T1);
             var item2 = default(T2);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -159,7 +159,7 @@ namespace Hagar.Codecs
 
         void IFieldCodec<ValueTuple<T1, T2, T3>>.WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2, T3) value)
         {
@@ -181,7 +181,7 @@ namespace Hagar.Codecs
             var item1 = default(T1);
             var item2 = default(T2);
             var item3 = default(T3);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -232,7 +232,7 @@ namespace Hagar.Codecs
 
         void IFieldCodec<ValueTuple<T1, T2, T3, T4>>.WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2, T3, T4) value)
         {
@@ -256,7 +256,7 @@ namespace Hagar.Codecs
             var item2 = default(T2);
             var item3 = default(T3);
             var item4 = default(T4);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -312,7 +312,7 @@ namespace Hagar.Codecs
         }
 
         void IFieldCodec<ValueTuple<T1, T2, T3, T4, T5>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2, T3, T4, T5) value)
         {
@@ -338,7 +338,7 @@ namespace Hagar.Codecs
             var item3 = default(T3);
             var item4 = default(T4);
             var item5 = default(T5);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -400,7 +400,7 @@ namespace Hagar.Codecs
         }
 
         void IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2, T3, T4, T5, T6) value)
         {
@@ -429,7 +429,7 @@ namespace Hagar.Codecs
             var item4 = default(T4);
             var item5 = default(T5);
             var item6 = default(T6);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -497,7 +497,7 @@ namespace Hagar.Codecs
         }
 
         void IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6, T7>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             (T1, T2, T3, T4, T5, T6, T7) value)
         {
@@ -530,7 +530,7 @@ namespace Hagar.Codecs
             var item5 = default(T5);
             var item6 = default(T6);
             var item7 = default(T7);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();
@@ -605,7 +605,7 @@ namespace Hagar.Codecs
 
         void IFieldCodec<ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8>>.WriteField<TBufferWriter>(
             ref Writer<TBufferWriter> writer,
-            uint fieldIdDelta,
+            int fieldIdDelta,
             Type expectedType,
             ValueTuple<T1, T2, T3, T4, T5, T6, T7, T8> value)
         {
@@ -638,7 +638,7 @@ namespace Hagar.Codecs
             var item6 = default(T6);
             var item7 = default(T7);
             var item8 = default(T8);
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();

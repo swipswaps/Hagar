@@ -53,7 +53,7 @@ namespace Hagar.ISerializable
             foreach (var field in info)
             {
                 var surrogate = new SerializationEntrySurrogate(field);
-                this.entrySerializer.WriteField(ref writer, first ? 1 : (uint)0, SerializationEntryCodec.SerializationEntryType, surrogate);
+                this.entrySerializer.WriteField(ref writer, first ? 1 : (int)0, SerializationEntryCodec.SerializationEntryType, surrogate);
                 if (first) first = false;
             }
             
@@ -68,7 +68,7 @@ namespace Hagar.ISerializable
 
             this.callbacks.OnDeserializing?.Invoke(ref result, this.streamingContext);
 
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();

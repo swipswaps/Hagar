@@ -81,10 +81,10 @@ namespace Hagar.WireProtocol
         /// <remarks>
         /// If <see cref="IsFieldIdValid"/> is <see langword="false"/>, this value is not a complete field id delta.
         /// </remarks>
-        public uint FieldIdDelta
+        public int FieldIdDelta
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => (uint)(this.tag & FieldIdMask);
+            get => this.tag & FieldIdMask;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => this.tag = (byte)((this.tag & ~FieldIdMask) | ((byte)value & FieldIdMask));

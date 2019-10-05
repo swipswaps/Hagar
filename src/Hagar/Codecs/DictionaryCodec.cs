@@ -28,7 +28,7 @@ namespace Hagar.Codecs
             this.activator = activator;
         }
 
-        void IFieldCodec<Dictionary<TKey, TValue>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, Dictionary<TKey, TValue> value)
+        void IFieldCodec<Dictionary<TKey, TValue>>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, Dictionary<TKey, TValue> value)
         {
             if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
             writer.WriteFieldHeader(fieldIdDelta, expectedType, value.GetType(), WireType.TagDelimited);
@@ -41,7 +41,7 @@ namespace Hagar.Codecs
             var first = true;
             foreach (var element in value)
             {
-                this.pairCodec.WriteField(ref writer, first ? 1U : 0, typeof(KeyValuePair<TKey, TValue>), element);
+                this.pairCodec.WriteField(ref writer, first ? 1 : 0, typeof(KeyValuePair<TKey, TValue>), element);
                 first = false;
             }
             
@@ -57,7 +57,7 @@ namespace Hagar.Codecs
             var placeholderReferenceId = ReferenceCodec.CreateRecordPlaceholder(reader.Session);
             Dictionary<TKey, TValue> result = null;
             IEqualityComparer<TKey> comparer = null;
-            uint fieldId = 0;
+            int fieldId = 0;
             while (true)
             {
                 var header = reader.ReadFieldHeader();

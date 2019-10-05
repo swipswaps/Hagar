@@ -13,12 +13,12 @@ namespace Hagar.Codecs
         private static readonly Type ByteArrayType = typeof(byte[]);
         private static readonly Type UIntType = typeof(uint);
 
-        void IFieldCodec<Type>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, Type value)
+        void IFieldCodec<Type>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, Type value)
         {
             WriteField(ref writer, fieldIdDelta, expectedType, value);
         }
 
-        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, Type value) where TBufferWriter : IBufferWriter<byte>
+        public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, Type value) where TBufferWriter : IBufferWriter<byte>
         {
             if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
             writer.WriteFieldHeader(fieldIdDelta, expectedType, TypeType, WireType.TagDelimited);
@@ -56,7 +56,7 @@ namespace Hagar.Codecs
         {
             if (field.WireType == WireType.Reference) return ReferenceCodec.ReadReference<Type>(ref reader, field);
 
-            uint fieldId = 0;
+            int fieldId = 0;
             var schemaType = default(SchemaType);
             uint id = 0;
             Type result = null;

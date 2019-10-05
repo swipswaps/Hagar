@@ -12,7 +12,7 @@ namespace Hagar.Serializers
     /// <typeparam name="TField"></typeparam>
     public sealed class AbstractTypeSerializer<TField> : IFieldCodec<TField> where TField : class
     {
-        void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TField value)
+        void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TField value)
         {
             // If the value is null then we will not be able to get its type in order to get a concrete codec for it.
             // Therefore write the null reference and exit.

@@ -4,27 +4,26 @@ using System.Text;
 
 namespace Hagar.WireProtocol
 {
+    public struct DeserializationState
+    {
+        public Field Field;
+        public int FieldId;
+    }
+
     public struct Field
     {
-        private uint fieldIdDelta;
+        private int fieldIdDelta;
         private Type fieldType;
         public Tag Tag;
 
-        public Field(Tag tag)
-        {
-            this.Tag = tag;
-            this.fieldIdDelta = 0;
-            this.fieldType = null;
-        }
-
-        public Field(Tag tag, uint extendedFieldIdDelta, Type type)
+        public Field(Tag tag, int extendedFieldIdDelta, Type type)
         {
             this.Tag = tag;
             this.fieldIdDelta = extendedFieldIdDelta;
             this.fieldType = type;
         }
 
-        public uint FieldIdDelta
+        public int FieldIdDelta
         {
             // If the embedded field id delta is valid, return it, otherwise return the extended field id delta.
             // The extended field id might not be valid if this field has the Extended wire type.
@@ -32,9 +31,6 @@ namespace Hagar.WireProtocol
             get
             {
                 if (this.Tag.IsFieldIdValid) return this.Tag.FieldIdDelta;
-#if DEBUG
-                if (!this.HasFieldId) ThrowFieldIdInvalid();
-#endif
                 return this.fieldIdDelta;
             }
 

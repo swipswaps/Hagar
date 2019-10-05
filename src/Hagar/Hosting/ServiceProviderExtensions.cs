@@ -96,7 +96,7 @@ namespace Hagar
                 this.codecProvider = codecProvider;
             }
             
-            public void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TField value) where TBufferWriter : IBufferWriter<byte> => this.Value.WriteField(ref writer, fieldIdDelta, expectedType, value);
+            public void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TField value) where TBufferWriter : IBufferWriter<byte> => this.Value.WriteField(ref writer, fieldIdDelta, expectedType, value);
             
             public TField ReadValue(ref Reader reader, Field field) => this.Value.ReadValue(ref reader, field);
 

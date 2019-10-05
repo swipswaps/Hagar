@@ -331,7 +331,7 @@ namespace Hagar.CodeGenerator
             }
 
             // Order members according to their FieldId, since fields must be serialized in order and FieldIds are serialized as deltas.
-            uint previousFieldId = 0;
+            int previousFieldId = 0;
             foreach (var member in members.OrderBy(m => m.Description.FieldId))
             {
                 var description = member.Description;
@@ -403,10 +403,10 @@ namespace Hagar.CodeGenerator
 
             var body = new List<StatementSyntax>
             {
-                // C#: uint fieldId = 0;
+                // C#: int fieldId = 0;
                 LocalDeclarationStatement(
                     VariableDeclaration(
-                        PredefinedType(Token(SyntaxKind.UIntKeyword)),
+                        PredefinedType(Token(SyntaxKind.IntKeyword)),
                         SingletonSeparatedList(VariableDeclarator(fieldIdVar.Identifier)
                             .WithInitializer(EqualsValueClause(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(0)))))))
             };
@@ -482,7 +482,7 @@ namespace Hagar.CodeGenerator
                     var description = member.Description;
 
                     // C#: case <fieldId>:
-                    var label = CaseSwitchLabel(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal(description.FieldId)));
+                    var label = CaseSwitchLabel(LiteralExpression(SyntaxKind.NumericLiteralExpression, Literal((int)description.FieldId)));
 
                     // C#: instance.<member> = this.<codec>.ReadValue(ref reader, header);
                     var codec = serializerFields.OfType<ICodecDescription>()

@@ -35,7 +35,7 @@ namespace Hagar.Codecs
                 this.codec = codec;
             }
 
-            void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value)
+            void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value)
             {
                 this.codec.WriteField(ref writer, fieldIdDelta, expectedType, (TField)value);
             }
@@ -59,7 +59,7 @@ namespace Hagar.Codecs
 
             public object InnerCodec => this.codec;
 
-            void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, TField value)
+            void IFieldCodec<TField>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, TField value)
             {
                 this.codec.WriteField(ref writer, fieldIdDelta, expectedType, value);
             }

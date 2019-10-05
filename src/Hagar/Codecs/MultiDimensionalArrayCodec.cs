@@ -21,7 +21,7 @@ namespace Hagar.Codecs
             this.elementCodec = HagarGeneratedCodeHelper.UnwrapService(this, elementCodec);
         }
 
-        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, object value)
+        void IFieldCodec<object>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, int fieldIdDelta, Type expectedType, object value)
         {
             if (ReferenceCodec.TryWriteReferenceField(ref writer, fieldIdDelta, expectedType, value)) return;
             writer.WriteFieldHeader(fieldIdDelta, expectedType, value.GetType(), WireType.TagDelimited);
@@ -45,7 +45,7 @@ namespace Hagar.Codecs
             while (remaining-- > 0)
             {
                 var element = array.GetValue(indices);
-                this.elementCodec.WriteField(ref writer, first ? 1U : 0, typeof(T), (T) element);
+                this.elementCodec.WriteField(ref writer, first ? 1 : 0, typeof(T), (T) element);
                 first = false;
 
                 // Increment the indices array by 1.
@@ -73,7 +73,7 @@ namespace Hagar.Codecs
 
             var placeholderReferenceId = ReferenceCodec.CreateRecordPlaceholder(reader.Session);
             Array result = null;
-            uint fieldId = 0;
+            int fieldId = 0;
             int[] lengths = null;
             int[] indices = null;
             var rank = 0;

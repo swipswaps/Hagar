@@ -23,7 +23,7 @@ namespace Hagar.Codecs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteStartObject<TBufferWriter>(
             ref this Writer<TBufferWriter> writer,
-            uint fieldId,
+            int fieldId,
             Type expectedType,
             Type actualType) where TBufferWriter : IBufferWriter<byte>
         {

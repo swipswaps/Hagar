@@ -697,7 +697,7 @@ namespace Hagar.CodeGenerator
         {
             var fields = new List<FieldDescription>();
 
-            uint fieldId = 0;
+            ushort fieldId = 0;
             foreach (var parameter in method.Parameters)
             {
                 fields.Add(new MethodParameterFieldDescription(parameter, $"arg{fieldId}", fieldId));
@@ -788,7 +788,7 @@ namespace Hagar.CodeGenerator
 
         internal class MethodParameterFieldDescription : FieldDescription, IMemberDescription
         {
-            public MethodParameterFieldDescription(IParameterSymbol parameter, string fieldName, uint fieldId)
+            public MethodParameterFieldDescription(IParameterSymbol parameter, string fieldName, ushort fieldId)
                 : base(parameter.Type, fieldName)
             {
                 this.FieldId = fieldId;
@@ -798,7 +798,7 @@ namespace Hagar.CodeGenerator
             public int ParameterOrdinal => this.Parameter.Ordinal;
 
             public override bool IsInjected => false;
-            public uint FieldId { get; }
+            public ushort FieldId { get; }
             public ISymbol Member => this.Parameter;
             public ITypeSymbol Type => this.FieldType;
             public IParameterSymbol Parameter { get; }

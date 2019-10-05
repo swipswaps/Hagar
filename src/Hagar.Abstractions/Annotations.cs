@@ -29,11 +29,11 @@ namespace Hagar
         | AttributeTargets.Method)]
     public sealed class IdAttribute : Attribute
     {
-        public IdAttribute(uint id)
+        public IdAttribute(ushort id)
         {
             this.Id = id;
         }
 
-        public uint Id { get; }
+        public ushort Id { get; }
     }
 }

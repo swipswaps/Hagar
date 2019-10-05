@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using Hagar.Buffers;
@@ -15,7 +15,7 @@ namespace Hagar.Codecs
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteFieldHeader<TBufferWriter>(
             ref this Writer<TBufferWriter> writer,
-            uint fieldId,
+            int fieldId,
             Type expectedType,
             Type actualType,
             WireType wireType) where TBufferWriter : IBufferWriter<byte>
@@ -27,30 +27,30 @@ namespace Hagar.Codecs
             if (actualType == expectedType)
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Expected));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarInt((uint)fieldId);
             }
             else if (writer.Session.WellKnownTypes.TryGetWellKnownTypeId(actualType, out var typeOrReferenceId))
             {
                 writer.Write((byte) (tag | (byte) SchemaType.WellKnown));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarInt((uint)fieldId);
                 writer.WriteVarInt(typeOrReferenceId);
             }
             else if (writer.Session.ReferencedTypes.TryGetTypeReference(actualType, out typeOrReferenceId))
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Referenced));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarInt((uint)fieldId);
                 writer.WriteVarInt(typeOrReferenceId);
             }
             else
             {
                 writer.Write((byte) (tag | (byte) SchemaType.Encoded));
-                if (hasExtendedFieldId) writer.WriteVarInt(fieldId);
+                if (hasExtendedFieldId) writer.WriteVarInt((uint)fieldId);
                 writer.Session.TypeCodec.Write(ref writer, actualType);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteFieldHeaderExpected<TBufferWriter>(this ref Writer<TBufferWriter> writer, uint fieldId, WireType wireType)
+        public static void WriteFieldHeaderExpected<TBufferWriter>(this ref Writer<TBufferWriter> writer, int fieldId, WireType wireType)
             where TBufferWriter : IBufferWriter<byte>
         {
             if (fieldId < Tag.MaxEmbeddedFieldIdDelta) WriteFieldHeaderExpectedEmbedded(ref writer, fieldId, wireType);
@@ -58,39 +58,41 @@ namespace Hagar.Codecs
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteFieldHeaderExpectedEmbedded<TBufferWriter>(this ref Writer<TBufferWriter> writer, uint fieldId, WireType wireType)
+        public static void WriteFieldHeaderExpectedEmbedded<TBufferWriter>(this ref Writer<TBufferWriter> writer, int fieldId, WireType wireType)
             where TBufferWriter : IBufferWriter<byte>
         {
             writer.Write((byte) ((byte) wireType | (byte) fieldId));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteFieldHeaderExpectedExtended<TBufferWriter>(this ref Writer<TBufferWriter> writer, uint fieldId, WireType wireType)
+        public static void WriteFieldHeaderExpectedExtended<TBufferWriter>(this ref Writer<TBufferWriter> writer, int fieldId, WireType wireType)
             where TBufferWriter : IBufferWriter<byte>
         {
             writer.Write((byte) ((byte) wireType | Tag.FieldIdCompleteMask));
-            writer.WriteVarInt(fieldId);
+            writer.WriteVarInt((uint)fieldId);
         }
 
         public static Field ReadFieldHeader(ref this Reader reader)
         {
-            Type type = null;
-            uint extendedId = 0;
             var tag = reader.ReadByte();
 
-            // If all of the field id delta bits are set and the field isn't an extended wiretype field, read the extended field id delta
-            if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask && (tag & (byte) WireType.Extended) != (byte) WireType.Extended)
+            if ((tag & (byte)WireType.Extended) == (byte)WireType.Extended)
             {
-                extendedId = reader.ReadVarUInt32();
-            }
+                // For an optimization in the generated deserializers, Field.FieldIdDelta is < 0 if the field is an extended field
 
-            // If schema type is valid, read the type.
-            if ((tag & (byte) WireType.Extended) != (byte) WireType.Extended)
+                return new Field(tag, short.MinValue, null);
+            }
+            else
             {
-                type = reader.ReadType(reader.Session, (SchemaType) (tag & Tag.SchemaTypeMask));
-            }
+                int extendedId = 0;
+                if ((tag & Tag.FieldIdCompleteMask) == Tag.FieldIdCompleteMask)
+                {
+                    extendedId = (int)reader.ReadVarUInt32();
+                }
 
-            return new Field(tag, extendedId, type);
+                var type = reader.ReadType(reader.Session, (SchemaType)(tag & Tag.SchemaTypeMask));
+                return new Field(tag, extendedId, type);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
