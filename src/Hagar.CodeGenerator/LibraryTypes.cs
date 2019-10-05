@@ -72,7 +72,7 @@ namespace Hagar.CodeGenerator
             INamedTypeSymbol Type(string metadataName)
             {
                 var result = compilation.GetTypeByMetadataName(metadataName);
-                if (result == null) throw new InvalidOperationException("Cannot find type with metadata name " + metadataName);
+                if (result is null) throw new InvalidOperationException("Cannot find type with metadata name " + metadataName);
                 return result;
             }
         }
