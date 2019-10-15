@@ -92,7 +92,6 @@ namespace TestRpc
         }
     }
 
-    /*
     [System.CodeDom.Compiler.GeneratedCodeAttribute("HagarGen", "0.2.4.0")]
     internal sealed class HandCrafted_Invokable_IPingPongGrain_Ping : global::Hagar.Invocation.Request
     {
@@ -103,7 +102,7 @@ namespace TestRpc
         }
 
         public override int ArgumentCount => 0;
-        public override void SetTarget<TTargetHolder>(TTargetHolder holder) => this.target = holder.GetTarget<global::TestRpc.App.IPingPongGrain>();
+        public override void SetTarget<TTargetHolder>(TTargetHolder holder) => this.target = holder.GetComponent<global::TestRpc.App.IPingPongGrain>();
         public override TTarget GetTarget<TTarget>() => (TTarget)this.target;
         public override void Dispose()
         {
@@ -144,7 +143,7 @@ namespace TestRpc
         }
 
         public override int ArgumentCount => 1;
-        public override void SetTarget<TTargetHolder>(TTargetHolder holder) => this.target = holder.GetTarget<global::TestRpc.App.IPingPongGrain>();
+        public override void SetTarget<TTargetHolder>(TTargetHolder holder) => this.target = holder.GetComponent<global::TestRpc.App.IPingPongGrain>();
         public override TTarget GetTarget<TTarget>() => (TTarget)this.target;
         public override void Dispose()
         {
@@ -203,5 +202,4 @@ namespace TestRpc
             return completion.AsValueTask();
         }
     }
-    */
 }

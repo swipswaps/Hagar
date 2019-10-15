@@ -18,6 +18,8 @@ using Microsoft.Extensions.DependencyInjection;
 using MyPocos;
 using Newtonsoft.Json;
 using NodaTime;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace TestApp
 {
@@ -43,7 +45,7 @@ namespace TestApp
             await proxy.Multiply(4, 5, "hello");
             var proxyBase = proxy as MyProxyBaseClass;
             using var invocation = proxyBase.Invocations.First();
-            invocation.SetTarget(new TargetHolder(new MyImplementation()));
+            invocation.SetTarget(new TargetHolder(new MyImplementation(), serviceProvider));
             await invocation.Invoke();
 
             var generic = GetProxy<IMyInvokable<int>>();
@@ -74,18 +76,99 @@ namespace TestApp
             }
         }
 
+        public class ComponentCollection<TKey>
+        {
+            private readonly Dictionary<TKey, object> components = new Dictionary<TKey, object>();
+
+            public T GetComponent<T>(TKey key)
+            {
+                this.components.TryGetValue(key, out var component);
+                return (T)component;
+            }
+        }
+
+        public interface IKeyedExtension<TKey>
+        {
+            TKey Key { get; }
+        }
+
         internal struct TargetHolder : ITargetHolder
         {
+            private List<object> components;
+            private Dictionary<string, object> stringComponents;
             private readonly object target;
+            private readonly IServiceProvider services;
 
-            public TargetHolder(object target)
+            public TargetHolder(object target, IServiceProvider services)
             {
                 this.target = target;
+                this.services = services;
+                this.stringComponents = new Dictionary<string, object>();
+                this.components = new List<object>();
             }
 
-            public TTarget GetTarget<TTarget>() => (TTarget)this.target;
+            public T GetComponent<T>()
+            {
+                {
+                    if (this.target is T typed) return typed;
+                }
 
-            public TExtension GetComponent<TExtension>() => throw new NotImplementedException();
+                components ??= new List<object>();
+                foreach (var component in components)
+                {
+                    if (component is T typed) return typed;
+                }
+
+                {
+                    // Create and add the component.
+                    var typed = services.GetRequiredService<T>();
+                    components.Add(typed);
+                    return typed;
+                }
+            }
+
+            public T GetComponent<TKey, T>(TKey key)
+            {
+                if (typeof(TKey) == typeof(string))
+                {
+                    var stringKey = key as string;
+                    if (stringComponents.TryGetValue(stringKey, out var result))
+                    {
+                        return (T)result;
+                    }
+                    else
+                    {
+                        var typedResult = services.GetRequiredService<T>();
+                        this.stringComponents[stringKey] = typedResult;
+                        return typedResult;
+                    }
+                }
+                else
+                {
+                    {
+                        if (this.target is T typed && typed is IKeyedExtension<TKey> keyed && keyed.Key.Equals(key)) return typed;
+                    }
+
+                    components ??= new List<object>();
+                    foreach (var component in components)
+                    {
+                        if (component is T typed && typed is IKeyedExtension<TKey> keyed && keyed.Key.Equals(key)) return typed;
+                    }
+
+                    {
+                        // Create and add the component.
+                        var typed = services.GetRequiredService<T>();
+                        if (!(typed is IKeyedExtension<TKey> keyed && keyed.Key.Equals(key))) ThrowNotKeyed<T, TKey>(typed);
+                        components.Add(typed);
+                        return typed;
+                    }
+
+                    throw new NotSupportedException($"Components with key type {typeof(TKey)} are not supported on this instance");
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private static void ThrowNotKeyed<T, TKey>(T component) => throw new InvalidOperationException($"Component {component} of type {component.GetType()} does not implement {typeof(IKeyedExtension<TKey>)}");
         }
 
         internal class MyImplementation : IMyInvokable

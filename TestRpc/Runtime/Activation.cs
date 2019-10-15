@@ -39,7 +39,7 @@ namespace TestRpc.Runtime
 
         public GrainId GrainId { get; }
 
-        public TTarget GetTarget<TTarget>() => (TTarget)this.activation;
+        public TTarget GetComponent<TTarget>() => (TTarget)this.activation;
 
         public TComponent GetComponent<TComponent>() => (TComponent)this.extensions[typeof(TComponent)];
 
