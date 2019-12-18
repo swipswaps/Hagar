@@ -531,9 +531,20 @@ namespace Hagar.CodeGenerator
                 this.Name = generatedClassName;
                 this.Members = members;
 
-                this.TypeParameters = interfaceDescription.InterfaceType.TypeParameters
+                this.TypeParameters = GetTypeParameters(interfaceDescription.InterfaceType)
                     .Concat(this.methodDescription.Method.TypeParameters)
                     .ToImmutableArray();
+
+                IEnumerable<ITypeParameterSymbol> GetTypeParameters(INamedTypeSymbol type)
+                {
+                    var baseType = type.BaseType;
+                    if (baseType != null && baseType.IsUnboundGenericType)
+                    {
+                        foreach (var t in GetTypeParameters(baseType)) yield return t;
+                    }
+
+                    foreach (var t in type.TypeParameters) yield return t;
+                }
             }
 
             public TypeSyntax TypeSyntax

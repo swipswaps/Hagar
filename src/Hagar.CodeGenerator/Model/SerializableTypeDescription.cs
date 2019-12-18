@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -14,6 +15,7 @@ namespace Hagar.CodeGenerator
             this.Type = type;
             this.Members = members.ToList();
             this.SemanticModel = semanticModel;
+            this.TypeParameters = GetTypeParameters(type).ToImmutableArray();
         }
 
         private INamedTypeSymbol Type { get; }
@@ -33,9 +35,21 @@ namespace Hagar.CodeGenerator
 
         public bool IsGenericType => this.Type.IsGenericType;
 
-        public ImmutableArray<ITypeParameterSymbol> TypeParameters => this.Type.TypeParameters;
+        public ImmutableArray<ITypeParameterSymbol> TypeParameters { get; }
 
         public List<IMemberDescription> Members { get; }
         public SemanticModel SemanticModel { get; }
+
+        private static IEnumerable<ITypeParameterSymbol> GetTypeParameters(INamedTypeSymbol type)
+        {
+            var baseType = type.BaseType;
+            if (baseType != null && baseType.IsUnboundGenericType)
+            {
+                Console.WriteLine($"{type} has baseType {baseType} with unbound generic parameters");
+                foreach (var t in GetTypeParameters(baseType)) yield return t;
+            }
+
+            foreach (var t in type.TypeParameters) yield return t;
+        }
     }
 }
