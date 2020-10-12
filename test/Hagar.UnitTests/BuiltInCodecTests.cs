@@ -327,13 +327,6 @@ namespace Hagar.UnitTests
 
     public class IPAddressTests : FieldCodecTester<IPAddress, IPAddressCodec>
     {
-
-        protected override void Configure(IHagarBuilder builder)
-        {
-            base.Configure(builder);
-            builder.AddAssembly(typeof(IPAddressCodec).Assembly);
-        }
-
         protected override IPAddress[] TestValues => new[] { IPAddress.Any, IPAddress.IPv6Any, IPAddress.IPv6Loopback, IPAddress.IPv6None, IPAddress.Loopback, IPAddress.Parse("123.123.10.3"), CreateValue() };
 
         protected override IPAddress CreateValue()
