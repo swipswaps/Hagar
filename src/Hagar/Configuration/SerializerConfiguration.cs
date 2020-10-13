@@ -17,5 +17,7 @@ namespace Hagar.Configuration
     public sealed class TypeConfiguration
     {
         public Dictionary<uint, Type> WellKnownTypes { get; } = new Dictionary<uint, Type>();
+
+        public Dictionary<string, Type> TypeAliases = new Dictionary<string, Type>();
     }
 }

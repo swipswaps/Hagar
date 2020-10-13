@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,7 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Hagar.ISerializable\Hagar.ISerializable.csproj" />
     <ProjectReference Include="..\..\src\Hagar\Hagar.csproj" />
+    <ProjectReference Include="$(SourceRoot)src/Hagar.CodeGenerator/Hagar.CodeGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+    <ProjectReference Include="$(SourceRoot)src/Hagar.Analyzers/Hagar.Analyzers.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

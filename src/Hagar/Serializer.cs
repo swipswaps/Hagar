@@ -460,16 +460,16 @@ namespace Hagar
         /// <returns>A byte array containing the serialized value.</returns>
         public byte[] SerializeToArray(T value, int sizeHint = 0)
         {
-            using var buffer = new PooledArrayBufferWriter(sizeHint);
             using var session = _sessionPool.GetSession();
-            var writer = Writer.Create(buffer, session);
+            var writer = Writer.Create(new PooledArrayBufferWriter(sizeHint), session);
             _codec.WriteField(ref writer, 0, typeof(T), value);
             writer.Commit();
 
             // Copy the result into a fresh array.
-            var written = buffer.WrittenSpan;
+            var written = writer.Output.WrittenSpan;
             var result = new byte[written.Length];
             written.CopyTo(result);
+            writer.Output.Dispose();
 
             return result;
         }
