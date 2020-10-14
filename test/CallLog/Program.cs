@@ -61,7 +61,7 @@ namespace CallLog
 
             id = IdSpan.Create("counter2");
             _callerContext = ActivatorUtilities.CreateInstance<CounterGrain>(_serviceProvider, id);
-            await grain.ActivateAsync();
+            await _callerContext.ActivateAsync();
             _catalog.RegisterGrain(id, _callerContext);
             await base.StartAsync(cancellationToken);
         }
@@ -396,13 +396,15 @@ namespace CallLog
         {
             try
             {
-                using var iterator = _dbLog.Scan(beginAddress: _dbLog.BeginAddress, endAddress: long.MaxValue);
+                using var iterator = _dbLog.Scan(beginAddress: _dbLog.BeginAddress, endAddress: long.MaxValue, name: "main", recover: true);
                 await foreach (var (entry, entryLength, currentAddress, nextAddress) in iterator.GetAsyncEnumerable(_shutdownCancellation.Token))
                 {
                     if (!_entryChannelWriter.TryWrite(new LogEntryHolder(entry, entryLength, currentAddress, nextAddress)))
                     {
                         break;
                     }
+
+                    iterator.CompleteUntil(currentAddress);
                 }
             }
             catch (Exception exception)
