@@ -118,12 +118,38 @@ namespace CallLog
         public IResponseCompletionSource Completion { get; set; }
     }
 
+
+    [GenerateSerializer]
+    internal class ActivationMarker
+    {
+        /// <summary>
+        /// The time of this activation.
+        /// </summary>
+        [Id(1)]
+        public DateTime Time { get; set; }
+
+        /// <summary>
+        /// The unique identifier for this activation.
+        /// </summary>
+        [Id(2)]
+        public Guid InvocationId { get; set; }
+
+        /// <summary>
+        /// The version of the grain at the time of this activation.
+        /// </summary>
+        [Id(3)]
+        public int Version { get; set; }
+    }
+
     internal class CounterGrain : IGrainContext, ICounterGrain, ITargetHolder
     {
         private readonly object _lock = new object();
         private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
         private long _nextMessageId;
+        private readonly Guid _invocationId;
+        private bool _isRecovered;
         private readonly Channel<object> _messages;
+        private readonly Channel<Message> _logStage;
         private readonly ILogger<CounterGrain> _log;
         private readonly LogManager _logManager;
         private readonly MessageRouter _router;
@@ -133,6 +159,7 @@ namespace CallLog
 
         public CounterGrain(IdSpan id, ILogger<CounterGrain> log, LogManager logManager, MessageRouter router)
         {
+            _invocationId = Guid.NewGuid();
             _messages = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
             {
                 SingleReader = true,
@@ -146,10 +173,21 @@ namespace CallLog
 
         public IdSpan Id => _id;
 
+        public int MaxSupportedVersion { get; set; } = 2;
+
+        public int CurrentVersion { get; set; }
+
         public async ValueTask ActivateAsync()
         {
             RuntimeContext.Current = this;
-            _runTask = Task.Run(Run);
+
+            _runTask = Task.Run(RunMessagePump);
+            _logManager.EnqueueLogEntry(_id, new ActivationMarker
+            {
+                InvocationId = _invocationId,
+                Time = DateTime.UtcNow,
+                Version = this.MaxSupportedVersion,
+            });
             await Task.CompletedTask;
         }
 
@@ -209,14 +247,14 @@ namespace CallLog
             }
         }
 
-        public bool OnOutboundMessage(IResponseCompletionSource completion, Message message)
+        public bool PrepareRequest(IResponseCompletionSource completion, Message requestMessage)
         {
             bool added;
             RequestState state;
             lock (_lock)
             {
                 var messageId = ++_nextMessageId;
-                message.SequenceNumber = messageId;
+                requestMessage.SequenceNumber = messageId;
                 if (!_callbacks.TryAdd(messageId, new RequestState { Completion = completion }))
                 {
                     // This request has already been seen.
@@ -240,40 +278,123 @@ namespace CallLog
             return !added;
         }
 
-        private async Task Run()
+        private async Task RunMessagePump()
         {
             RuntimeContext.Current = this;
             var reader = _messages.Reader;
             while (await reader.WaitToReadAsync())
             {
-                while (reader.TryRead(out var message))
+                while (reader.TryRead(out var item))
                 {
-                    if (message is not Message msg)
+                    if (item is ActivationMarker marker)
                     {
-                        _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), message);
+                        this.CurrentVersion = marker.Version;
+                        if (marker.InvocationId == _invocationId)
+                        {
+                            _isRecovered = true;
+                        }
+                    }
+                    else if (item is not Message message)
+                    {
+                        _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), item);
                         continue;
                     }
 
-                    switch (msg.Body)
+                    HandleCommittedMessage(message);
+                }
+            }
+        }
+
+
+        private void HandleCommittedMessage(Message message)
+        {
+            if (message.Body is Response response)
+            {
+                bool removed = false;
+                RequestState state;
+                lock (_lock)
+                {
+                    removed = _callbacks.Remove(message.SequenceNumber, out state);
+                    if (!removed)
                     {
-                        case Request request:
-                            request.SetTarget(this);
-                            try
-                            {
-                                var response = await request.Invoke();
-                                _router.SendMessage(msg.SenderId, new Message { SenderId = _id, SequenceNumber = msg.SequenceNumber, Body = response });
-                            }
-                            catch (Exception exception)
-                            {
-                                _router.SendMessage(msg.SenderId, new Message { SenderId = _id, SequenceNumber = msg.SequenceNumber, Body = Response.FromException<object>(exception) });
-                            }
-
-                            break;
-                        case Response response:
-
-                            break;
+                        _callbacks[message.SequenceNumber] = new RequestState { Response = response };
                     }
                 }
+
+                if (removed)
+                {
+                    state.Completion.Complete(response);
+                }
+                else
+                {
+                    _log.LogWarning("Received unexpected response {Id}", message.SequenceNumber);
+                }
+            }
+            else if (message.Body is Request request)
+            {
+                request.SetTarget(this);
+
+                ValueTask<Response> responseTask;
+                try
+                {
+                     responseTask = request.Invoke();
+                }
+                catch (Exception exception)
+                {
+                    responseTask = new ValueTask<Response>(Response.FromException<object>(exception));
+                }
+
+                if (responseTask.IsCompleted)
+                {
+                    _router.SendMessage(message.SenderId, new Message { SenderId = _id, SequenceNumber = message.SequenceNumber, Body = responseTask.Result });
+                }
+                else
+                {
+                    _ = HandleRequestAsync(message, responseTask);
+                    async ValueTask HandleRequestAsync(Message message, ValueTask<Response> task)
+                    {
+                        try
+                        {
+                            response = await task;
+                        }
+                        catch (Exception exception)
+                        {
+                            response = Response.FromException<object>(exception);
+                        }
+
+                        _router.SendMessage(message.SenderId, new Message { SenderId = _id, SequenceNumber = message.SequenceNumber, Body = response });
+                    }
+                }
+            }
+        }
+
+        private async Task RunLogWriter()
+        {
+            var writeQueue = new List<(long logAddress, Message)>();
+            var reader = _messages.Reader;
+            var writer = _messages.Writer;
+            while (await reader.WaitToReadAsync())
+            {
+                while (reader.TryRead(out var item))
+                {
+                    if (item is not Message message)
+                    {
+                        _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), item);
+                        continue;
+                    }
+
+                    var address = _logManager.EnqueueLogEntry(_id, message);
+                    writeQueue.Add((address, message));
+                }
+
+                foreach (var (address, message) in writeQueue)
+                {
+                    await _logManager.WaitForCommitAsync(address, CancellationToken.None);
+
+                    writer.TryWrite(message);
+                }
+
+                writeQueue.Clear();
             }
         }
 
@@ -312,7 +433,7 @@ namespace CallLog
 
         void OnMessage(object message);
 
-        bool OnOutboundMessage(IResponseCompletionSource completion, Message message);
+        bool PrepareRequest(IResponseCompletionSource completion, Message message);
 
         ValueTask DeactivateAsync();
     }
@@ -364,7 +485,7 @@ namespace CallLog
             _logEntrySerializer = logEntrySerializer;
         }
 
-        public void EnqueueLogEntry(IdSpan grainId, object payload)
+        public long EnqueueLogEntry(IdSpan grainId, object payload)
         {
             var bytes = _logEntrySerializer.SerializeToArray(new LogEntry
             {
@@ -372,7 +493,7 @@ namespace CallLog
                 Payload = payload,
             }, sizeHint: 20);
 
-            _dbLog.Enqueue(bytes);
+            return _dbLog.Enqueue(bytes);
         }
 
         public async ValueTask EnqueueLogEntryAndWaitForCommitAsync(IdSpan grainId, object payload)
@@ -385,6 +506,8 @@ namespace CallLog
 
             await _dbLog.EnqueueAndWaitForCommitAsync(bytes);
         }
+
+        public ValueTask WaitForCommitAsync(long untilAddress, CancellationToken cancellationToken) => _dbLog.WaitForCommitAsync(untilAddress, cancellationToken);
 
 
         public FasterLog Log => _dbLog;
@@ -548,7 +671,7 @@ namespace CallLog
             }
         }
 
-        public bool OnOutboundMessage(IResponseCompletionSource completion, Message message)
+        public bool PrepareRequest(IResponseCompletionSource completion, Message message)
         {
             var requestId = Interlocked.Increment(ref _nextRequestId);
             message.SequenceNumber = requestId;
@@ -579,7 +702,7 @@ namespace CallLog
                 Body = body
             };
 
-            if (caller.OnOutboundMessage(callback, message))
+            if (caller.PrepareRequest(callback, message))
             {
                 // Send the message if the sender signals that it should be sent.
                 _logManager.EnqueueLogEntry(_id, message);
