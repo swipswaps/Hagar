@@ -8,8 +8,10 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -28,7 +30,9 @@ namespace CallLog
                         .AddAssembly(typeof(Program).Assembly)
                         .AddISerializableSupport();
                 });
+                services.AddSingleton<ApplicationContext>();
                 services.AddSingleton<Catalog>();
+                services.AddSingleton<MessageRouter>();
                 services.AddSingleton<LogManager>();
                 services.AddSingleton<ProxyFactory>();
                 services.AddSingleton<IHostedService, MyApp>();
@@ -43,13 +47,15 @@ namespace CallLog
         private readonly Catalog _catalog;
         private readonly ProxyFactory _proxyFactory;
         private readonly IServiceProvider _serviceProvider;
-        private IGrainContext _callerContext;
+        private readonly ApplicationContext _context;
 
-        public MyApp(Catalog catalog, ProxyFactory proxyFactory, IServiceProvider serviceProvider)
+        public MyApp(Catalog catalog, ProxyFactory proxyFactory, IServiceProvider serviceProvider, ApplicationContext context)
         {
             _catalog = catalog;
             _proxyFactory = proxyFactory;
             _serviceProvider = serviceProvider;
+            _context = context;
+            _catalog.RegisterGrain(context.Id, context);
         }
 
         public override async Task StartAsync(CancellationToken cancellationToken)
@@ -60,9 +66,9 @@ namespace CallLog
             _catalog.RegisterGrain(id, grain);
 
             id = IdSpan.Create("counter2");
-            _callerContext = ActivatorUtilities.CreateInstance<CounterGrain>(_serviceProvider, id);
-            await _callerContext.ActivateAsync();
-            _catalog.RegisterGrain(id, _callerContext);
+            grain = ActivatorUtilities.CreateInstance<CounterGrain>(_serviceProvider, id);
+            await grain.ActivateAsync();
+            _catalog.RegisterGrain(id, grain);
             await base.StartAsync(cancellationToken);
         }
 
@@ -70,7 +76,7 @@ namespace CallLog
         {
             var id = IdSpan.Create("counter1");
             var proxy = _proxyFactory.GetProxy<ICounterGrain, PersistentGrainChannelBase>(id);
-            RuntimeContext.Current = _callerContext;
+            RuntimeContext.Current = _context;
             while (!stoppingToken.IsCancellationRequested)
             {
                 await proxy.Increment();
@@ -106,19 +112,26 @@ namespace CallLog
         ValueTask Increment();
     }
 
+    internal struct RequestState
+    {
+        public Response Response { get; set; }
+        public IResponseCompletionSource Completion { get; set; }
+    }
+
     internal class CounterGrain : IGrainContext, ICounterGrain, ITargetHolder
     {
         private readonly object _lock = new object();
-        private readonly Dictionary<long, IResponseCompletionSource> _callbacks = new Dictionary<long, IResponseCompletionSource>();
+        private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
         private long _nextMessageId;
         private readonly Channel<object> _messages;
         private readonly ILogger<CounterGrain> _log;
         private readonly LogManager _logManager;
+        private readonly MessageRouter _router;
         private readonly IdSpan _id;
         private Task _runTask;
         private int _counter;
 
-        public CounterGrain(IdSpan id, ILogger<CounterGrain> log, LogManager logManager)
+        public CounterGrain(IdSpan id, ILogger<CounterGrain> log, LogManager logManager, MessageRouter router)
         {
             _messages = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
             {
@@ -128,6 +141,7 @@ namespace CallLog
             _id = id;
             _log = log;
             _logManager = logManager;
+            _router = router;
         }
 
         public IdSpan Id => _id;
@@ -160,10 +174,33 @@ namespace CallLog
         {
             if (message is Message msg && msg.Body is Response response)
             {
+                bool removed = false;
+                RequestState state;
                 lock (_lock)
                 {
-                    _callbacks.TryGetValue(msg.SequenceNumber, out var callback);
-                    callback.Complete(response);
+                    removed = _callbacks.Remove(msg.SequenceNumber, out state);
+                    if (!removed)
+                    {
+                        _callbacks[msg.SequenceNumber] = new RequestState { Response = response };
+                    }
+                }
+
+                if (removed)
+                {
+                    // Ensure responses are committed before sending them to the 
+                    Task.Run(async () =>
+                    {
+                        await _logManager.EnqueueLogEntryAndWaitForCommitAsync(
+                            msg.SenderId,
+                            new Message
+                            {
+                                SenderId = _id,
+                                SequenceNumber = msg.SequenceNumber,
+                                Body = response
+                            });
+
+                        state.Completion.Complete(response);
+                    });
                 }
             }
             else if (!_messages.Writer.TryWrite(message))
@@ -172,14 +209,35 @@ namespace CallLog
             }
         }
 
-        public void OnOutboundMessage(IResponseCompletionSource completion, Message message)
+        public bool OnOutboundMessage(IResponseCompletionSource completion, Message message)
         {
+            bool added;
+            RequestState state;
             lock (_lock)
             {
                 var messageId = ++_nextMessageId;
                 message.SequenceNumber = messageId;
-                _callbacks[messageId] = completion;
+                if (!_callbacks.TryAdd(messageId, new RequestState { Completion = completion }))
+                {
+                    // This request has already been seen.
+                    added = false;
+                    var removed = _callbacks.Remove(messageId, out state);
+                    Debug.Assert(removed);
+                }
+                else
+                {
+                    added = true;
+                    state = default;
+                }
             }
+
+            if (!added)
+            {
+                // Complete the already-seen request with the existing response.
+                completion.Complete(state.Response);
+            }
+
+            return !added;
         }
 
         private async Task Run()
@@ -190,53 +248,30 @@ namespace CallLog
             {
                 while (reader.TryRead(out var message))
                 {
-                    if (message is Increment)
-                    {
-                        _counter++;
-                        _log.LogInformation("{Id} counter is {Counter}", _id.ToString(), _counter);
-                    }
-                    else if (message is Message msg)
-                    {
-                        switch (msg.Body)
-                        {
-                            case Request request:
-                                request.SetTarget(this);
-                                var task = request.Invoke();
-                                _ = Task.Run(async () =>
-                                {
-                                    // TODO: await without Task.Run, but can't yet, since responses are processed here also.
-                                    Response response;
-                                    try
-                                    {
-                                        response = await task;
-                                    }
-                                    catch (Exception exception)
-                                    {
-                                        response = Response.FromException<object>(exception);
-                                    }
-
-                                    _logManager.EnqueueLogEntry(
-                                        msg.SenderId,
-                                        new Message
-                                        {
-                                            SenderId = _id,
-                                            SequenceNumber = msg.SequenceNumber,
-                                            Body = response
-                                        });
-                                });
-                                break;
-                            case Response response:
-                                lock (_lock)
-                                {
-                                    _callbacks.TryGetValue(msg.SequenceNumber, out var callback);
-                                    callback.Complete(response);
-                                }
-                                break;
-                        }
-                    }
-                    else
+                    if (message is not Message msg)
                     {
                         _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), message);
+                        continue;
+                    }
+
+                    switch (msg.Body)
+                    {
+                        case Request request:
+                            request.SetTarget(this);
+                            try
+                            {
+                                var response = await request.Invoke();
+                                _router.SendMessage(msg.SenderId, new Message { SenderId = _id, SequenceNumber = msg.SequenceNumber, Body = response });
+                            }
+                            catch (Exception exception)
+                            {
+                                _router.SendMessage(msg.SenderId, new Message { SenderId = _id, SequenceNumber = msg.SequenceNumber, Body = Response.FromException<object>(exception) });
+                            }
+
+                            break;
+                        case Response response:
+
+                            break;
                     }
                 }
             }
@@ -277,7 +312,7 @@ namespace CallLog
 
         void OnMessage(object message);
 
-        void OnOutboundMessage(IResponseCompletionSource completion, Message message);
+        bool OnOutboundMessage(IResponseCompletionSource completion, Message message);
 
         ValueTask DeactivateAsync();
     }
@@ -299,6 +334,18 @@ namespace CallLog
             }
 
             throw new InvalidOperationException();
+        }
+    }
+
+    internal class MessageRouter
+    {
+        private readonly Catalog _catalog;
+
+        public MessageRouter(Catalog catalog) => _catalog = catalog;
+
+        public void SendMessage(IdSpan grainId, Message message)
+        {
+            _catalog.GetGrain(grainId).OnMessage(message);
         }
     }
 
@@ -327,6 +374,18 @@ namespace CallLog
 
             _dbLog.Enqueue(bytes);
         }
+
+        public async ValueTask EnqueueLogEntryAndWaitForCommitAsync(IdSpan grainId, object payload)
+        {
+            var bytes = _logEntrySerializer.SerializeToArray(new LogEntry
+            {
+                GrainId = grainId,
+                Payload = payload,
+            }, sizeHint: 20);
+
+            await _dbLog.EnqueueAndWaitForCommitAsync(bytes);
+        }
+
 
         public FasterLog Log => _dbLog;
 
@@ -404,7 +463,7 @@ namespace CallLog
                         break;
                     }
 
-                    iterator.CompleteUntil(currentAddress);
+                    //iterator.CompleteUntil(currentAddress);
                 }
             }
             catch (Exception exception)
@@ -456,6 +515,49 @@ namespace CallLog
     // request => log => enumerator => target
     // response => log => enumerator => caller
 
+    internal class ApplicationContext : IGrainContext
+    {
+        private long _nextRequestId = 0;
+        private ILogger<ApplicationContext> _log;
+        private readonly ConcurrentDictionary<long, IResponseCompletionSource> _pendingRequests = new ConcurrentDictionary<long, IResponseCompletionSource>();
+
+        public ApplicationContext(ILogger<ApplicationContext> logger)
+        {
+            _log = logger;
+        }
+
+        public IdSpan Id { get; } = IdSpan.Create("app");
+        public ValueTask ActivateAsync() => default;
+        public ValueTask DeactivateAsync() => default;
+        public void OnMessage(object message)
+        {
+            if (message is Message msg && msg.Body is Response response)
+            {
+                if (_pendingRequests.TryRemove(msg.SequenceNumber, out var completion))
+                {
+                    completion.Complete(response);
+                }
+                else
+                {
+                    _log.LogWarning("No pending request matching response for sequence {SequenceNumber}", msg.SequenceNumber);
+                }
+            }
+            else
+            {
+                _log.LogWarning("Unsupported message of type {Type}: {Message}", message?.GetType(), message);
+            }
+        }
+
+        public bool OnOutboundMessage(IResponseCompletionSource completion, Message message)
+        {
+            var requestId = Interlocked.Increment(ref _nextRequestId);
+            message.SequenceNumber = requestId;
+            _pendingRequests[requestId] = completion;
+
+            return true;
+        }
+    }
+
     internal abstract class PersistentGrainChannelBase
     {
         private readonly IdSpan _id;
@@ -476,9 +578,12 @@ namespace CallLog
                 SenderId = callerId,
                 Body = body
             };
-            caller.OnOutboundMessage(callback, message);
 
-            _logManager.EnqueueLogEntry(_id, message);
+            if (caller.OnOutboundMessage(callback, message))
+            {
+                // Send the message if the sender signals that it should be sent.
+                _logManager.EnqueueLogEntry(_id, message);
+            }
         }
     }
     
@@ -507,6 +612,11 @@ namespace CallLog
                         continue;
                     }
 
+                    if (!HasBaseType(proxyType.BaseType, baseType))
+                    {
+                        continue;
+                    }
+
                     var matching = proxyType.FindInterfaces(
                             (type, criteria) =>
                                 type.IsGenericType && type.GetGenericTypeDefinition() == (Type)criteria,
@@ -520,6 +630,13 @@ namespace CallLog
             }
 
             return _knownProxies.First(interfaceType.IsAssignableFrom);
+
+            static bool HasBaseType(Type type, Type baseType) => type switch
+            {
+                null => false,
+                Type when type == baseType => true,
+                _ => HasBaseType(type.BaseType, baseType)
+            };
         }
 
         public TInterface GetProxy<TInterface, TBase>(IdSpan id)
