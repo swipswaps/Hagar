@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -34,10 +33,11 @@ namespace CallLog
                 services.AddSingleton<Catalog>();
                 services.AddSingleton<MessageRouter>();
                 services.AddSingleton<LogManager>();
+                services.AddSingleton<LogEnumerator>();
                 services.AddSingleton<ProxyFactory>();
                 services.AddSingleton<IHostedService, MyApp>();
-                services.AddSingleton<IHostedService, LogEnumerator>();
                 services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<LogManager>());
+                services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<LogEnumerator>());
             })
             .RunConsoleAsync();
     }
@@ -63,26 +63,30 @@ namespace CallLog
         public override async Task StartAsync(CancellationToken cancellationToken)
         {
             var id = IdSpan.Create("counter1");
-            var grain = ActivatorUtilities.CreateInstance<CounterGrain>(_serviceProvider, id);
-            await grain.ActivateAsync();
-            _catalog.RegisterGrain(id, grain);
+            var grain1 = ActivatorUtilities.CreateInstance<WorkflowContext>(_serviceProvider, id);
+            grain1.Instance = ActivatorUtilities.CreateInstance<CounterWorkflow>(_serviceProvider, id);
+            _catalog.RegisterGrain(id, grain1);
 
             id = IdSpan.Create("counter2");
-            grain = ActivatorUtilities.CreateInstance<CounterGrain>(_serviceProvider, id);
-            await grain.ActivateAsync();
-            _catalog.RegisterGrain(id, grain);
+            var grain2 = ActivatorUtilities.CreateInstance<WorkflowContext>(_serviceProvider, id);
+            grain2.Instance = ActivatorUtilities.CreateInstance<CounterWorkflow>(_serviceProvider, id);
+            _catalog.RegisterGrain(id, grain2);
+
+            await grain1.ActivateAsync();
+            await grain2.ActivateAsync();
+
             await base.StartAsync(cancellationToken);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var id = IdSpan.Create("counter1");
-            var proxy = _proxyFactory.GetProxy<ICounterGrain, RpcProxyBase>(id);
+            var proxy = _proxyFactory.GetProxy<ICounterWorkflow, WorkflowProxyBase>(id);
             RuntimeContext.Current = _context;
             while (!stoppingToken.IsCancellationRequested)
             {
-                var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
-                _log.LogInformation("Got result: {DateTime}", result);
+                //var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
+                //_log.LogInformation("Got result: {DateTime}", result);
                 await Task.Delay(10_000);
             }
         }
@@ -95,9 +99,9 @@ namespace CallLog
 
     public static class RuntimeContext
     {
-        private static readonly AsyncLocal<IGrainContext> _runtimeContext = new AsyncLocal<IGrainContext>();
+        private static readonly AsyncLocal<IWorkflowContext> _runtimeContext = new AsyncLocal<IWorkflowContext>();
 
-        public static IGrainContext Current { get => _runtimeContext.Value; set => _runtimeContext.Value = value; }
+        public static IWorkflowContext Current { get => _runtimeContext.Value; set => _runtimeContext.Value = value; }
     }
 
     [GenerateSerializer]
@@ -105,12 +109,12 @@ namespace CallLog
     {
     }
 
-    [GenerateMethodSerializers(typeof(RpcProxyBase))]
-    public interface IGrain
+    [GenerateMethodSerializers(typeof(WorkflowProxyBase))]
+    public interface IWorkflow
     {
     }
 
-    public interface ICounterGrain : IGrain
+    public interface ICounterWorkflow : IWorkflow
     {
         ValueTask Increment();
         ValueTask<DateTime> PingPongFriend(IdSpan friend, int cycles);
@@ -124,7 +128,7 @@ namespace CallLog
 
 
     [GenerateSerializer]
-    internal class ActivationMarker
+    internal class ActivationMarker : Request
     {
         /// <summary>
         /// The time of this activation.
@@ -143,390 +147,21 @@ namespace CallLog
         /// </summary>
         [Id(3)]
         public int Version { get; set; }
-    }
 
-    internal class CounterGrain : IGrainContext, ICounterGrain, ITargetHolder
-    {
-        private readonly object _lock = new object();
-        private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
-        private long _nextMessageId;
-        private readonly Guid _invocationId;
-        private bool _isRecovered;
-        private readonly Channel<object> _messages;
-        private readonly Channel<object> _logStage;
-        private readonly ILogger<CounterGrain> _log;
-        private readonly ProxyFactory _proxyFactory;
-        private readonly LogManager _logManager;
-        private readonly MessageRouter _router;
-        private readonly IdSpan _id;
-        private Task _runTask;
-        private int _counter;
+        public override int ArgumentCount => 0;
 
-        public CounterGrain(IdSpan id, ILogger<CounterGrain> log, ProxyFactory proxyFactory, LogManager logManager, MessageRouter router)
+        public override void Dispose()
         {
-            _invocationId = Guid.NewGuid();
-            _logStage = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = false
-            });
-            _messages = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = false
-            });
-            _id = id;
-            _log = log;
-            _proxyFactory = proxyFactory;
-            _logManager = logManager;
-            _router = router;
         }
 
-        public IdSpan Id => _id;
-
-        public int MaxSupportedVersion { get; set; } = 2;
-
-        public int CurrentVersion { get; set; }
-
-        public async ValueTask ActivateAsync()
+        public override TArgument GetArgument<TArgument>(int index) => default;
+        public override TTarget GetTarget<TTarget>() => default;
+        public override void SetArgument<TArgument>(int index, in TArgument value) { }
+        public override void SetTarget<TTargetHolder>(TTargetHolder holder) { }
+        protected override ValueTask InvokeInner()
         {
-            RuntimeContext.Current = this;
-
-            _logStage.Writer.TryWrite(new ActivationMarker
-            {
-                InvocationId = _invocationId,
-                Time = DateTime.UtcNow,
-                Version = this.MaxSupportedVersion,
-            });
-
-            _runTask = Task.WhenAll(Task.Run(RunLogWriter), Task.Run(RunMessagePump));
-
-            await Task.CompletedTask;
-        }
-
-        public async ValueTask DeactivateAsync()
-        {
-            RuntimeContext.Current = this;
-            _messages.Writer.TryComplete();
-            if (_runTask is Task task)
-            {
-                await task.ConfigureAwait(false);
-            }
-        }
-
-        public ValueTask Increment()
-        {
-            _log.LogInformation("Incrementing counter: {Counter}", _counter);
-            _counter++;
+            ((WorkflowContext)RuntimeContext.Current).OnActivationMarker(this);
             return default;
-        }
-
-        public void OnReplayMessage(object message)
-        {
-            var previousContext = RuntimeContext.Current;
-            RuntimeContext.Current = this;
-            try
-            {
-                if (message is Message msg && msg.Body is Response response)
-                {
-                    bool removed = false;
-                    RequestState state;
-                    lock (_lock)
-                    {
-                        removed = _callbacks.Remove(msg.SequenceNumber, out state);
-                        if (!removed)
-                        {
-                            _callbacks[msg.SequenceNumber] = new RequestState { Response = response };
-                        }
-                    }
-
-                    if (removed)
-                    {
-                        if (state.Completion is object)
-                        {
-                            state.Completion.Complete(response);
-                        }
-                        else
-                        {
-                            _log.LogWarning("Received unexpected response {Id}", msg.SequenceNumber);
-                        }
-                    }
-                }
-                else if (!_isRecovered)
-                {
-                    _messages.Writer.TryWrite(message);
-                }
-                else
-                {
-                    // TODO: Unsubscribe? Depends on log impl...
-                    //_log.LogWarning("Received message {Message} after recovery has completed", message);
-                }
-            }
-            finally
-            {
-                RuntimeContext.Current = previousContext;
-            }
-        }
-
-        public void OnMessage(object message)
-        {
-            /*
-            if (message is Message msg && msg.Body is Response response)
-            {
-                bool removed = false;
-                RequestState state;
-                lock (_lock)
-                {
-                    removed = _callbacks.Remove(msg.SequenceNumber, out state);
-                    if (!removed)
-                    {
-                        _callbacks[msg.SequenceNumber] = new RequestState { Response = response };
-                    }
-                }
-
-                if (removed)
-                {
-                    // Ensure responses are committed before sending them to the 
-                    Task.Run(async () =>
-                    {
-                        // If the instance has not recovered, then the value must already have been persisted.
-                        if (_isRecovered)
-                        {
-                            await _logManager.EnqueueLogEntryAndWaitForCommitAsync(
-                                msg.SenderId,
-                                new Message
-                                {
-                                    SenderId = _id,
-                                    SequenceNumber = msg.SequenceNumber,
-                                    Body = response
-                                });
-                        }
-
-                        // Complete the request with the response.
-                        state.Completion.Complete(response);
-                    });
-                }
-            }
-            else*/ if (!_logStage.Writer.TryWrite(message))
-            {
-                _log.LogWarning("Received message {Message} after deactivation has begun", message);
-            }
-        }
-
-        public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
-        {
-            var previousContext = RuntimeContext.Current;
-            RuntimeContext.Current = this;
-            try
-            {
-                bool added;
-                RequestState state;
-                lock (_lock)
-                {
-                    // Get a unique id for this request.
-                    var messageId = ++_nextMessageId;
-                    sequenceNumber = messageId;
-                    if (_callbacks.TryAdd(messageId, new RequestState { Completion = completion }))
-                    {
-                        added = true;
-                        state = default;
-                    }
-                    else
-                    {
-                        // This request has already been seen.
-                        added = false;
-                        var removed = _callbacks.Remove(messageId, out state);
-                        Debug.Assert(removed);
-                    }
-                }
-
-                if (!added)
-                {
-                    // Complete the already-seen request with the existing response.
-                    completion.Complete(state.Response);
-                }
-
-                return added;
-            }
-            finally
-            {
-                RuntimeContext.Current = previousContext;
-            }
-        }
-
-        private async Task RunMessagePump()
-        {
-            RuntimeContext.Current = this;
-            var reader = _messages.Reader;
-            while (await reader.WaitToReadAsync())
-            {
-                while (reader.TryRead(out var item))
-                {
-                    if (item is ActivationMarker marker)
-                    {
-                        this.CurrentVersion = marker.Version;
-                        if (marker.InvocationId == _invocationId)
-                        {
-                            _isRecovered = true;
-                        }
-                    }
-                    else if (item is Message message)
-                    {
-                        await HandleCommittedMessage(message);
-                    }
-                    else
-                    {
-                        _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), item);
-                        continue;
-                    }
-                }
-            }
-        }
-
-
-        private ValueTask HandleCommittedMessage(Message message)
-        {
-            if (message.Body is Response response)
-            {
-                bool removed = false;
-                RequestState state;
-                lock (_lock)
-                {
-                    removed = _callbacks.Remove(message.SequenceNumber, out state);
-                    if (!removed)
-                    {
-                        _callbacks[message.SequenceNumber] = new RequestState { Response = response };
-                    }
-                }
-
-                if (removed)
-                {
-                    state.Completion.Complete(response);
-                }
-                else
-                {
-                    _log.LogWarning("Received unexpected response {Id}", message.SequenceNumber);
-                }
-
-                return default;
-            }
-            else if (message.Body is IInvokable request)
-            {
-                request.SetTarget(this);
-
-                ValueTask<Response> responseTask;
-                try
-                {
-                     responseTask = request.Invoke();
-                }
-                catch (Exception exception)
-                {
-                    responseTask = new ValueTask<Response>(Response.FromException<object>(exception));
-                }
-
-                if (responseTask.IsCompleted)
-                {
-                    _router.SendMessage(message.SenderId, new Message { SenderId = _id, SequenceNumber = message.SequenceNumber, Body = responseTask.Result });
-                    return default;
-                }
-                else
-                {
-                    return HandleRequestAsync(message, responseTask);
-                    async ValueTask HandleRequestAsync(Message message, ValueTask<Response> task)
-                    {
-                        try
-                        {
-                            response = await task;
-                        }
-                        catch (Exception exception)
-                        {
-                            response = Response.FromException<object>(exception);
-                        }
-
-                        _router.SendMessage(message.SenderId, new Message { SenderId = _id, SequenceNumber = message.SequenceNumber, Body = response });
-                    }
-                }
-            }
-            else
-            {
-                _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), message);
-                return default;
-            }
-        }
-
-        private async Task RunLogWriter()
-        {
-            RuntimeContext.Current = this;
-            var writeQueue = new List<(long logAddress, object)>();
-            var reader = _logStage.Reader;
-            var writer = _messages.Writer;
-            while (await reader.WaitToReadAsync())
-            {
-                while (reader.TryRead(out var item))
-                {
-                    var address = _logManager.EnqueueLogEntry(_id, item);
-                    writeQueue.Add((address, item));
-                }
-
-                foreach (var (address, message) in writeQueue)
-                {
-                    await _logManager.WaitForCommitAsync(address, CancellationToken.None);
-
-                    if (message is Message msg && msg.Body is Response response)
-                    {
-                        bool removed = false;
-                        RequestState state;
-                        lock (_lock)
-                        {
-                            removed = _callbacks.Remove(msg.SequenceNumber, out state);
-                            if (!removed)
-                            {
-                                _callbacks[msg.SequenceNumber] = new RequestState { Response = response };
-                            }
-                        }
-
-                        if (removed)
-                        {
-                            // Complete the request with the response.
-                            if (state.Completion is object)
-                            {
-                                state.Completion.Complete(response);
-                            }
-                            else
-                            {
-                                _log.LogWarning("No request for response {Response} for message {Id}", response, msg.SequenceNumber);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        writer.TryWrite(message);
-                    }
-                }
-
-                writeQueue.Clear();
-            }
-        }
-
-        public TTarget GetTarget<TTarget>() => (TTarget)(object)this;
-
-        public TComponent GetComponent<TComponent>() => throw new NotImplementedException();
-
-        public async ValueTask<DateTime> PingPongFriend(IdSpan friend, int cycles)
-        {
-            if (cycles <= 0)
-            {
-                var time = await WorkflowEnvironment.GetUtcNow();
-                _log.LogInformation("{Id} says PINGPONG FRIEND at {DateTime}!", _id.ToString(), time);
-                return time;
-            }
-            else
-            {
-                var friendProxy = _proxyFactory.GetProxy<ICounterGrain, RpcProxyBase>(friend);
-                var time = await friendProxy.PingPongFriend(this.Id, cycles - 1);
-                _log.LogInformation("{Id} received PINGPONG FRIEND at {DateTime}!", _id.ToString(), time);
-                return time;
-            }
         }
     }
 
@@ -567,20 +202,19 @@ namespace CallLog
     public class LogEntry
     {
         [Id(1)]
-        public IdSpan GrainId { get; set; }
+        public IdSpan WorkflowId { get; set; }
 
         [Id(2)]
         public object Payload { get; set; }
     }
 
-    public interface IGrainContext
+    public interface IWorkflowContext
     {
         IdSpan Id { get; }
 
         ValueTask ActivateAsync();
 
         void OnMessage(object message);
-        void OnReplayMessage(object message);
 
         bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber);
 
@@ -589,14 +223,14 @@ namespace CallLog
 
     internal class Catalog 
     {
-        private readonly ConcurrentDictionary<IdSpan, IGrainContext> _grains = new ConcurrentDictionary<IdSpan, IGrainContext>(IdSpan.Comparer.Instance);
+        private readonly ConcurrentDictionary<IdSpan, IWorkflowContext> _grains = new ConcurrentDictionary<IdSpan, IWorkflowContext>(IdSpan.Comparer.Instance);
 
-        public void RegisterGrain(IdSpan grainId, IGrainContext grain)
+        public void RegisterGrain(IdSpan grainId, IWorkflowContext grain)
         {
             _grains[grainId] = grain;
         }
 
-        public IGrainContext GetGrain(IdSpan grainId)
+        public IWorkflowContext GetGrain(IdSpan grainId)
         {
             if (_grains.TryGetValue(grainId, out var grain))
             {
@@ -638,7 +272,7 @@ namespace CallLog
         {
             var bytes = _logEntrySerializer.SerializeToArray(new LogEntry
             {
-                GrainId = grainId,
+                WorkflowId = grainId,
                 Payload = payload,
             }, sizeHint: 20);
 
@@ -649,7 +283,7 @@ namespace CallLog
         {
             var bytes = _logEntrySerializer.SerializeToArray(new LogEntry
             {
-                GrainId = grainId,
+                WorkflowId = grainId,
                 Payload = payload,
             }, sizeHint: 20);
 
@@ -657,7 +291,6 @@ namespace CallLog
         }
 
         public ValueTask WaitForCommitAsync(long untilAddress, CancellationToken cancellationToken) => _dbLog.WaitForCommitAsync(untilAddress, cancellationToken);
-
 
         public FasterLog Log => _dbLog;
 
@@ -690,6 +323,7 @@ namespace CallLog
         private readonly Channel<LogEntryHolder> _entryChannel;
         private readonly ChannelReader<LogEntryHolder> _entryChannelReader;
         private readonly ChannelWriter<LogEntryHolder> _entryChannelWriter;
+        private readonly ConcurrentDictionary<IdSpan, RecoveryState> _recoveryChannels = new ConcurrentDictionary<IdSpan, RecoveryState>();
         private readonly Serializer<LogEntry> _entrySerializer;
         private readonly FasterLog _dbLog;
         private readonly Catalog _catalog;
@@ -709,6 +343,15 @@ namespace CallLog
             _catalog = catalog;
             _entrySerializer = entrySerializer;
             _log = log;
+        }
+
+        private class RecoveryState
+        {
+            public Channel<object> Entries { get; } = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
+            {
+                SingleWriter = true,
+                SingleReader = true,
+            });
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -742,7 +385,9 @@ namespace CallLog
             {
                 _log.LogError(exception, "Error reading log");
             }
-        } 
+        }
+
+        public Channel<object> GetCommittedLogEntries(IdSpan id) => _recoveryChannels.GetOrAdd(id, _ => new RecoveryState()).Entries;
 
         public async Task RunReader()
         {
@@ -753,8 +398,9 @@ namespace CallLog
                     while (_entryChannelReader.TryRead(out var holder))
                     {
                         var entry = _entrySerializer.Deserialize(holder.Payload);
-                        var grain = _catalog.GetGrain(entry.GrainId);
-                        grain.OnReplayMessage(entry.Payload);
+                        var grain = _catalog.GetGrain(entry.WorkflowId);
+                        var state = _recoveryChannels.GetOrAdd(entry.WorkflowId, _ => new RecoveryState());
+                        state.Entries.Writer.TryWrite(entry.Payload);
                     }
                 }
             }
@@ -787,7 +433,7 @@ namespace CallLog
     // request => log => enumerator => target
     // response => log => enumerator => caller
 
-    internal class ApplicationContext : IGrainContext
+    internal class ApplicationContext : IWorkflowContext
     {
         private long _nextRequestId = 0;
         private ILogger<ApplicationContext> _log;
@@ -835,12 +481,12 @@ namespace CallLog
         }
     }
 
-    internal abstract class RpcProxyBase
+    internal abstract class WorkflowProxyBase
     {
         private readonly IdSpan _id;
         private readonly MessageRouter _router;
 
-        protected RpcProxyBase(IdSpan id, MessageRouter router)
+        protected WorkflowProxyBase(IdSpan id, MessageRouter router)
         {
             _id = id;
             _router = router;
@@ -849,19 +495,24 @@ namespace CallLog
         protected void SendRequest(IResponseCompletionSource callback, IInvokable body)
         {
             var caller = RuntimeContext.Current;
-            var callerId = caller.Id;
-            var message = new Message
+
+            if (caller is null)
             {
-                SenderId = callerId,
-                Body = body
-            };
+                throw new InvalidOperationException("No RuntimeContext set. Set a runtime context before making calls");
+            }
 
             if (caller.PrepareRequest(callback, out var sequenceNumber))
             {
-                message.SequenceNumber = sequenceNumber;
-
-                // Send the message if the sender signals that it should be sent.
-                _router.SendMessage(_id, message);
+                // Send the message only if the sender signals that it should be sent.
+                var callerId = caller.Id;
+                _router.SendMessage(
+                    _id,
+                    new Message
+                    {
+                        SenderId = callerId,
+                        SequenceNumber = sequenceNumber,
+                        Body = body
+                    });
             }
         }
     }
