@@ -149,7 +149,7 @@ namespace CallLog
         private readonly Guid _invocationId;
         private bool _isRecovered;
         private readonly Channel<object> _messages;
-        private readonly Channel<Message> _logStage;
+        private readonly Channel<object> _logStage;
         private readonly ILogger<CounterGrain> _log;
         private readonly LogManager _logManager;
         private readonly MessageRouter _router;
@@ -228,20 +228,29 @@ namespace CallLog
                     // Ensure responses are committed before sending them to the 
                     Task.Run(async () =>
                     {
-                        await _logManager.EnqueueLogEntryAndWaitForCommitAsync(
-                            msg.SenderId,
-                            new Message
-                            {
-                                SenderId = _id,
-                                SequenceNumber = msg.SequenceNumber,
-                                Body = response
-                            });
+                        // If the instance has not recovered, then the value must already have been persisted.
+                        if (_isRecovered)
+                        {
+                            await _logManager.EnqueueLogEntryAndWaitForCommitAsync(
+                                msg.SenderId,
+                                new Message
+                                {
+                                    SenderId = _id,
+                                    SequenceNumber = msg.SequenceNumber,
+                                    Body = response
+                                });
+                        }
 
+                        // Complete the request with the response.
                         state.Completion.Complete(response);
                     });
                 }
             }
-            else if (!_messages.Writer.TryWrite(message))
+            else if (!_isRecovered)
+            {
+                _messages.Writer.TryWrite(message);
+            }
+            else if (!_logStage.Writer.TryWrite(message))
             {
                 _log.LogWarning("Received message {Message} after deactivation has begun", message);
             }
@@ -294,13 +303,15 @@ namespace CallLog
                             _isRecovered = true;
                         }
                     }
-                    else if (item is not Message message)
+                    else if (item is Message message)
+                    {
+                        HandleCommittedMessage(message);
+                    }
+                    else
                     {
                         _log.LogWarning("{Id} received unknown message {Message}", _id.ToString(), item);
                         continue;
                     }
-
-                    HandleCommittedMessage(message);
                 }
             }
         }
