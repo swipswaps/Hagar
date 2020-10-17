@@ -151,14 +151,18 @@ namespace CallLog.Scheduling
         private static object DumpAsyncState(object o)
         {
             if (o is Delegate action)
+            {
                 return action.Target is null ? action.Method.DeclaringType + "." + action.Method.Name
                     : action.Method.DeclaringType.Name + "." + action.Method.Name + ": " + DumpAsyncState(action.Target);
+            }
 
             if (o?.GetType() is { Name: "ContinuationWrapper" } wrapper
                 && (wrapper.GetField("_continuation", BindingFlags.Instance | BindingFlags.NonPublic)
                     ?? wrapper.GetField("m_continuation", BindingFlags.Instance | BindingFlags.NonPublic)
                     )?.GetValue(o) is Action continuation)
+            {
                 return DumpAsyncState(continuation);
+            }
 
 #if !NETCOREAPP
             if (o?.GetType() is { Name: "MoveNextRunner" } runner

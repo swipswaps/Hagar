@@ -2,7 +2,6 @@
 using Hagar;
 using Hagar.Configuration;
 using Hagar.Invocation;
-using HagarGeneratedCode.CallLog;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -83,11 +82,26 @@ namespace CallLog
             var id = IdSpan.Create("counter1");
             var proxy = _proxyFactory.GetProxy<ICounterWorkflow, WorkflowProxyBase>(id);
             RuntimeContext.Current = _context;
+
+            var count = await proxy.GetCounter();
+            if (count >= 100)
+            {
+                _log.LogInformation("Stopping client calls because count is exceeded");
+                return;
+            }
             while (!stoppingToken.IsCancellationRequested)
             {
-                //var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
-                //_log.LogInformation("Got result: {DateTime}", result);
-                await Task.Delay(10_000);
+                var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
+                count = await proxy.Increment();
+
+                //_log.LogInformation("Got result: {DateTime} and count {Count}", result, count);
+                if (count >= 100)
+                {
+                    _log.LogInformation("Stopping client calls because count is exceeded");
+                    return;
+                }
+
+                await Task.Delay(100);
             }
         }
 
@@ -104,20 +118,9 @@ namespace CallLog
         public static IWorkflowContext Current { get => _runtimeContext.Value; set => _runtimeContext.Value = value; }
     }
 
-    [GenerateSerializer]
-    public class Increment
-    {
-    }
-
     [GenerateMethodSerializers(typeof(WorkflowProxyBase))]
     public interface IWorkflow
     {
-    }
-
-    public interface ICounterWorkflow : IWorkflow
-    {
-        ValueTask Increment();
-        ValueTask<DateTime> PingPongFriend(IdSpan friend, int cycles);
     }
 
     internal struct RequestState
@@ -126,9 +129,8 @@ namespace CallLog
         public IResponseCompletionSource Completion { get; set; }
     }
 
-
     [GenerateSerializer]
-    internal class ActivationMarker : Request
+    internal class ActivationMarker : IInvokable 
     {
         /// <summary>
         /// The time of this activation.
@@ -148,21 +150,24 @@ namespace CallLog
         [Id(3)]
         public int Version { get; set; }
 
-        public override int ArgumentCount => 0;
+        public int ArgumentCount => 0;
 
-        public override void Dispose()
+        public void Dispose()
         {
         }
 
-        public override TArgument GetArgument<TArgument>(int index) => default;
-        public override TTarget GetTarget<TTarget>() => default;
-        public override void SetArgument<TArgument>(int index, in TArgument value) { }
-        public override void SetTarget<TTargetHolder>(TTargetHolder holder) { }
-        protected override ValueTask InvokeInner()
+        public TArgument GetArgument<TArgument>(int index) => default;
+        public TTarget GetTarget<TTarget>() => default;
+        public ValueTask<Response> Invoke()
         {
             ((WorkflowContext)RuntimeContext.Current).OnActivationMarker(this);
-            return default;
+            return new ValueTask<Response>(Response.Completed);
         }
+
+        public void SetArgument<TArgument>(int index, in TArgument value) { }
+
+        public void SetTarget<TTargetHolder>(TTargetHolder holder) where TTargetHolder : ITargetHolder
+        { }
     }
 
     public class WorkflowEnvironment
@@ -196,6 +201,8 @@ namespace CallLog
 
         [Id(3)]
         public object Body { get; set; }
+
+        public override string ToString() => $"{SenderId} {SequenceNumber} {Body}";
     }
 
     [GenerateSerializer]
@@ -224,6 +231,7 @@ namespace CallLog
     internal class Catalog 
     {
         private readonly ConcurrentDictionary<IdSpan, IWorkflowContext> _grains = new ConcurrentDictionary<IdSpan, IWorkflowContext>(IdSpan.Comparer.Instance);
+        private readonly IWorkflowContext _defaultContext = new DefaultContext();
 
         public void RegisterGrain(IdSpan grainId, IWorkflowContext grain)
         {
@@ -237,7 +245,28 @@ namespace CallLog
                 return grain;
             }
 
+            if (grainId.ToString().StartsWith("app_"))
+            {
+                return _defaultContext;
+            }
+
             throw new InvalidOperationException();
+        }
+
+        private sealed class DefaultContext : IWorkflowContext
+        {
+            private long _sequenceNumber;
+
+            public IdSpan Id { get; } = IdSpan.Create($"default_{Guid.NewGuid():N}");
+
+            public ValueTask ActivateAsync() => default;
+            public ValueTask DeactivateAsync() => default;
+            public void OnMessage(object message) { }
+            public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
+            {
+                sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
+                return true;
+            }
         }
     }
 
@@ -306,7 +335,7 @@ namespace CallLog
             {
                 try
                 {
-                    await Task.Delay(1_000, stoppingToken);
+                    await Task.Delay(100, stoppingToken);
                     await _dbLog.CommitAsync(stoppingToken);
                 }
                 catch
@@ -363,6 +392,7 @@ namespace CallLog
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             _shutdownCancellation.Cancel();
+            _entryChannelWriter.TryComplete();
             await _runTask;
         }
 
@@ -393,12 +423,11 @@ namespace CallLog
         {
             try
             {
-                while (await _entryChannelReader.WaitToReadAsync(_shutdownCancellation.Token))
+                while (await _entryChannelReader.WaitToReadAsync())
                 {
                     while (_entryChannelReader.TryRead(out var holder))
                     {
                         var entry = _entrySerializer.Deserialize(holder.Payload);
-                        var grain = _catalog.GetGrain(entry.WorkflowId);
                         var state = _recoveryChannels.GetOrAdd(entry.WorkflowId, _ => new RecoveryState());
                         state.Entries.Writer.TryWrite(entry.Payload);
                     }
@@ -444,7 +473,7 @@ namespace CallLog
             _log = logger;
         }
 
-        public IdSpan Id { get; } = IdSpan.Create("app");
+        public IdSpan Id { get; } = IdSpan.Create($"app_{Guid.NewGuid():N}");
         public ValueTask ActivateAsync() => default;
         public ValueTask DeactivateAsync() => default;
         public void OnReplayMessage(object message)
@@ -462,7 +491,7 @@ namespace CallLog
                 }
                 else
                 {
-                    _log.LogWarning("No pending request matching response for sequence {SequenceNumber}", msg.SequenceNumber);
+                    //_log.LogWarning("No pending request matching response for sequence {SequenceNumber}", msg.SequenceNumber);
                 }
             }
             else

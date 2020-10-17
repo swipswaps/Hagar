@@ -19,6 +19,8 @@ namespace Hagar.Invocation
             return result;
         }
 
+        public static Response Completed => new SuccessResponse();
+
         [Id(1)]
         public abstract object Result { get; set; }
 
@@ -26,6 +28,15 @@ namespace Hagar.Invocation
         public abstract Exception Exception { get; set; }
 
         public abstract void Dispose();
+    }
+
+    [GenerateSerializer]
+    public sealed class SuccessResponse : Response
+    {
+        public override object Result { get; set; } 
+        public override Exception Exception { get; set; }
+
+        public override void Dispose() { }
     }
 
     public abstract class Response<TResult> : Response

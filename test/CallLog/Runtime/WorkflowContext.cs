@@ -1,9 +1,6 @@
 ﻿using CallLog.Scheduling;
-using Hagar;
 using Hagar.Invocation;
-using Hagar.Session;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,54 +10,6 @@ using System.Threading.Tasks;
 
 namespace CallLog
 {
-    // TODO: store the state elsewhere - it could be error prone to have services (ILogger) + data on the same class.
-    [GenerateSerializer]
-    public class CounterWorkflow : ICounterWorkflow
-    {
-        [NonSerialized]
-        private readonly IdSpan _id;
-
-        [NonSerialized]
-        private readonly ILogger<CounterWorkflow> _log;
-
-        [NonSerialized]
-        private readonly ProxyFactory _proxyFactory;
-
-        [Id(1)]
-        internal int _counter;
-
-        public CounterWorkflow(IdSpan id, ILogger<CounterWorkflow> log, ProxyFactory proxyFactory)
-        {
-            _id = id;
-            _log = log;
-            _proxyFactory = proxyFactory;
-        }
-
-        public ValueTask Increment()
-        {
-            _log.LogInformation("Incrementing counter: {Counter}", _counter);
-            _counter++;
-            return default;
-        }
-
-        public async ValueTask<DateTime> PingPongFriend(IdSpan friend, int cycles)
-        {
-            if (cycles <= 0)
-            {
-                var time = await WorkflowEnvironment.GetUtcNow();
-                _log.LogInformation("{Id} says PINGPONG FRIEND at {DateTime}!", _id.ToString(), time);
-                return time;
-            }
-            else
-            {
-                var friendProxy = _proxyFactory.GetProxy<ICounterWorkflow, WorkflowProxyBase>(friend);
-                var time = await friendProxy.PingPongFriend(_id, cycles - 1);
-                _log.LogInformation("{Id} received PINGPONG FRIEND at {DateTime}!", _id.ToString(), time);
-                return time;
-            }
-        }
-    }
-
     internal class WorkflowContext : IWorkflowContext, ITargetHolder
     {
         private readonly object _lock = new object();
@@ -75,7 +24,6 @@ namespace CallLog
         private readonly IdSpan _id;
         private readonly Queue<Message> _messageQueue = new Queue<Message>();
         private long _nextMessageId;
-        private bool _isRecovered;
         private Message _currentMessage;
         private object _instance;
         private Task _runTask;
@@ -112,26 +60,6 @@ namespace CallLog
 
         public async ValueTask ActivateAsync()
         {
-            RuntimeContext.Current = this;
-
-            // Write a marker to signify the creation of a new activation.
-            // This is used for:
-            //  * Workflow versioning, so that workflow code can evolve over time while remaining deterministic.
-            //  * Recovery, so that the workflow knows when it has recovered and can begin processing incoming requests.
-            //  * Diagnostics, so that the log can be inspected to see where each run began.
-            _logManager.EnqueueLogEntry(_id, new Message
-            {
-                SenderId = _id,
-                SequenceNumber = -1, // weird
-                Body =
-                new ActivationMarker
-                {
-                    InvocationId = _invocationId,
-                    Time = DateTime.UtcNow,
-                    Version = MaxSupportedVersion,
-                }
-            });
-
             _ = Task.Factory.StartNew(state => ((WorkflowContext)state).RecoverAsync(), this, CancellationToken.None, TaskCreationOptions.None, _taskScheduler);
             await Task.CompletedTask;
         }
@@ -158,9 +86,31 @@ namespace CallLog
         {
             try
             {
+                RuntimeContext.Current = this;
+
+                // Write a marker to signify the creation of a new activation.
+                // This is used for:
+                //  * Workflow versioning, so that workflow code can evolve over time while remaining deterministic.
+                //  * Recovery, so that the workflow knows when it has recovered and can begin processing incoming requests.
+                //  * Diagnostics, so that the log can be inspected to see where each run began.
+                await _logManager.EnqueueLogEntryAndWaitForCommitAsync(
+                    _id,
+                    new Message
+                    {
+                        SenderId = _id,
+                        SequenceNumber = -1, // weird
+                        Body = new ActivationMarker
+                        {
+                            InvocationId = _invocationId,
+                            Time = DateTime.UtcNow,
+                            Version = MaxSupportedVersion,
+                        }
+                    });
+
                 // Enumerate all log messages into buffer.
                 var entries = _logEnumerator.GetCommittedLogEntries(_id);
                 var requests = new List<Message>();
+                var encounteredMarker = false;
                 await foreach (var entry in entries.Reader.ReadAllAsync())
                 {
                     switch (entry)
@@ -169,12 +119,25 @@ namespace CallLog
                             // Handle responses immediately.
                             OnCommittedResponse(msg);
                             break;
-                        case Message msg when msg.Body is IInvokable:
+                        case Message msg when msg.Body is IInvokable invokable:
                             requests.Add(msg);
+                            if (invokable is ActivationMarker marker)
+                            {
+                                if (marker.InvocationId == _invocationId)
+                                {
+                                    encounteredMarker = true;
+                                    break;
+                                }
+                            }
                             break;
                         default:
                             _log.LogWarning("Unknown message during recovery: {Message}", entry);
                             break;
+                    }
+
+                    if (encounteredMarker)
+                    {
+                        break;
                     }
                 }
 
@@ -199,7 +162,6 @@ namespace CallLog
             CurrentVersion = marker.Version;
             if (marker.InvocationId == _invocationId)
             {
-                _isRecovered = true;
                 _log.LogInformation("{Id} recovered with InvocationId {InvocationId}", _id.ToString(), _invocationId);
             }
             else
@@ -227,6 +189,13 @@ namespace CallLog
         public void OnCommittedResponse(Message message)
         {
             var sequenceNumber = message.SequenceNumber;
+
+            // Sequence numbers less than zero are used for control messages.
+            if (sequenceNumber < 0)
+            {
+                return;
+            }
+
             var response = (Response)message.Body;
 
             bool removed = false;
@@ -251,10 +220,6 @@ namespace CallLog
                 {
                     _log.LogWarning("Received duplicate response {Id}", sequenceNumber);
                 }
-            }
-            else
-            {
-                _log.LogWarning("Received unexpected response {Id}", sequenceNumber);
             }
         }
 
@@ -368,6 +333,11 @@ namespace CallLog
             // else if message is request && no current request is executing, schedule it.
             // else if message is request && a current request is executing, enqueue it.
 
+            if (message is Message msg && msg.SequenceNumber < 0)
+            {
+                return;
+            }
+
             if (!_logStage.Writer.TryWrite(message))
             {
                 _log.LogWarning("Received message {Message} after deactivation has begun", message);
@@ -432,6 +402,24 @@ namespace CallLog
             {
                 while (reader.TryRead(out var item))
                 {
+                    // Avoid writing already-handled responses.
+                    if (item is Message msg && msg.Body is Response)
+                    {
+                        lock (_lock)
+                        {
+                            if (msg.SequenceNumber <= _nextMessageId
+                                && (!_callbacks.TryGetValue(msg.SequenceNumber, out var pending) || pending.Response is object || pending.Completion is null))
+                            {
+                                if (_log.IsEnabled(LogLevel.Trace))
+                                {
+                                    _log.LogTrace("... {Id} skipping already-seen response {Message}", _id.ToString(), msg);
+                                }
+
+                                continue;
+                            }
+                        }
+                    }
+
                     var address = _logManager.EnqueueLogEntry(_id, item);
                     writeQueue.Add((address, item));
                 }
