@@ -1,4 +1,5 @@
 ﻿using CallLog.Scheduling;
+using Hagar;
 using Hagar.Invocation;
 using Microsoft.Extensions.Logging;
 using System;
@@ -10,7 +11,13 @@ using System.Threading.Tasks;
 
 namespace CallLog
 {
-    internal class WorkflowContext : IWorkflowContext, ITargetHolder
+    [GenerateMethodSerializers(typeof(WorkflowProxyBase))]
+    internal interface IWorkflowControl
+    {
+        ValueTask OnActivationMarker(ActivationMarker marker);
+    }
+
+    internal class WorkflowContext : IWorkflowContext, ITargetHolder, IWorkflowControl
     {
         private readonly object _lock = new object();
         private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
@@ -157,7 +164,7 @@ namespace CallLog
             }
         }
 
-        internal void OnActivationMarker(ActivationMarker marker)
+        public ValueTask OnActivationMarker(ActivationMarker marker)
         {
             CurrentVersion = marker.Version;
             if (marker.InvocationId == _invocationId)
@@ -168,6 +175,8 @@ namespace CallLog
             {
                 _log.LogInformation("{Id} with InvocationId {InvocationId} encountered previous invocation with id {PreviousInvocationId}", _id.ToString(), _invocationId, marker.InvocationId);
             }
+
+            return default;
         }
 
         public void OnCommittedMessage(object message)
@@ -238,7 +247,7 @@ namespace CallLog
                     _messageQueue.Enqueue(message);
                 }
             }
-            
+
             void RunMessagePump()
             {
                 while (true)
@@ -436,7 +445,11 @@ namespace CallLog
 
         public TTarget GetTarget<TTarget>() => (TTarget)_instance;
 
-        public TComponent GetComponent<TComponent>() => throw new NotImplementedException();
+        public TComponent GetComponent<TComponent>() => this switch
+        {
+            TComponent component => component,
+            _ when _instance is TComponent component => component,
+            _ => throw new InvalidOperationException($"Extension {typeof(TComponent)} not available")
+        };
     }
-
 }
