@@ -13,7 +13,7 @@ namespace CallLog.Scheduling
     /// <summary>
     /// A single-concurrency, in-order task scheduler for per-activation work scheduling.
     /// </summary>
-    [DebuggerDisplay("ActivationTaskScheduler-{myId} RunQueue={workerGroup.WorkItemCount}")]
+    [DebuggerDisplay("ActivationTaskScheduler-{_myId} RunQueue={_workItems.Count}")]
     internal class ActivationTaskScheduler : TaskScheduler
 #if NETCOREAPP
         , IThreadPoolWorkItem

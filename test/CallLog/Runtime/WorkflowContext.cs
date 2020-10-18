@@ -2,6 +2,7 @@
 using Hagar;
 using Hagar.Invocation;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,7 +18,7 @@ namespace CallLog
         ValueTask OnActivationMarker(ActivationMarker marker);
     }
 
-    internal class WorkflowContext : IWorkflowContext, ITargetHolder, IWorkflowControl
+    internal class WorkflowContext : IWorkflowContext, IWorkflowControl
     {
         private readonly object _lock = new object();
         private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
@@ -30,7 +31,8 @@ namespace CallLog
         private readonly ActivationTaskScheduler _taskScheduler;
         private readonly IdSpan _id;
         private readonly Queue<Message> _messageQueue = new Queue<Message>();
-        private long _nextMessageId;
+        private readonly TargetHolder _targetHolder;
+        private long _sequenceNumber;
         private Message _currentMessage;
         private object _instance;
         private Task _runTask;
@@ -55,6 +57,7 @@ namespace CallLog
             _logEnumerator = logEnumerator;
             _router = router;
             _taskScheduler = new ActivationTaskScheduler(this, CancellationToken.None, taskSchedulerLogger);
+            _targetHolder = new TargetHolder(this);
         }
 
         public IdSpan Id => _id;
@@ -116,41 +119,15 @@ namespace CallLog
 
                 // Enumerate all log messages into buffer.
                 var entries = _logEnumerator.GetCommittedLogEntries(_id);
-                var requests = new List<Message>();
-                var encounteredMarker = false;
                 await foreach (var entry in entries.Reader.ReadAllAsync())
                 {
-                    switch (entry)
-                    {
-                        case Message msg when msg.Body is Response:
-                            // Handle responses immediately.
-                            OnCommittedResponse(msg);
-                            break;
-                        case Message msg when msg.Body is IInvokable invokable:
-                            requests.Add(msg);
-                            if (invokable is ActivationMarker marker)
-                            {
-                                if (marker.InvocationId == _invocationId)
-                                {
-                                    encounteredMarker = true;
-                                    break;
-                                }
-                            }
-                            break;
-                        default:
-                            _log.LogWarning("Unknown message during recovery: {Message}", entry);
-                            break;
-                    }
+                    OnCommittedMessage(entry);
 
-                    if (encounteredMarker)
+                    if ((entry as Message)?.Body is ActivationMarker marker && marker.InvocationId == _invocationId)
                     {
+                        // We have reached the end of the recovery portion of the log.
                         break;
                     }
-                }
-
-                foreach (var request in requests)
-                {
-                    OnCommittedRequest(request);
                 }
 
                 // Start pumping newly added messages.
@@ -266,6 +243,10 @@ namespace CallLog
                             _ = _messageQueue.Dequeue();
                             Invoke(message);
                         }
+                        else
+                        {
+                            return;
+                        }
                     }
                 }
             }
@@ -275,7 +256,7 @@ namespace CallLog
             void Invoke(Message message)
             {
                 var request = (IInvokable)message.Body;
-                request.SetTarget(this);
+                request.SetTarget(_targetHolder);
 
                 ValueTask<Response> responseTask;
                 try
@@ -361,8 +342,6 @@ namespace CallLog
         /// <returns></returns>
         public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
         {
-            // Always allocate a new sequence number.
-            // If recovery is still being performed, 
             var previousContext = RuntimeContext.Current;
             RuntimeContext.Current = this;
             try
@@ -372,7 +351,7 @@ namespace CallLog
                 lock (_lock)
                 {
                     // Get a unique id for this request.
-                    var messageId = ++_nextMessageId;
+                    var messageId = ++_sequenceNumber;
                     sequenceNumber = messageId;
                     if (_callbacks.TryAdd(messageId, new RequestState { Completion = completion }))
                     {
@@ -381,7 +360,8 @@ namespace CallLog
                     }
                     else
                     {
-                        // This request has already been seen.
+                        // This request has already been sent and a reponse has been received.
+                        // Avoid sending the request again. The response will be replayed during recovery to unblock the request.
                         added = false;
                         var removed = _callbacks.Remove(messageId, out state);
                         Debug.Assert(removed);
@@ -407,16 +387,19 @@ namespace CallLog
             RuntimeContext.Current = this;
             var writeQueue = new List<(long logAddress, object)>();
             var reader = _logStage.Reader;
+            long replayAfter = 0L;
             while (await reader.WaitToReadAsync())
             {
                 while (reader.TryRead(out var item))
                 {
-                    // Avoid writing already-handled responses.
+                    // Avoid writing already-written responses.
+                    // TODO: Ideally, this should also be modified de-duplicate requests from other workflows
                     if (item is Message msg && msg.Body is Response)
                     {
                         lock (_lock)
                         {
-                            if (msg.SequenceNumber <= _nextMessageId
+                            replayAfter = _sequenceNumber;
+                            if (msg.SequenceNumber <= _sequenceNumber
                                 && (!_callbacks.TryGetValue(msg.SequenceNumber, out var pending) || pending.Response is object || pending.Completion is null))
                             {
                                 if (_log.IsEnabled(LogLevel.Trace))
@@ -428,6 +411,9 @@ namespace CallLog
                             }
                         }
                     }
+
+                    // TODO: Record the sequence number so that this response is replayed once that sequence number has been reached.
+                    // This allows for deterministic replay with interleaving requests.
 
                     var address = _logManager.EnqueueLogEntry(_id, item);
                     writeQueue.Add((address, item));
@@ -443,13 +429,28 @@ namespace CallLog
             }
         }
 
-        public TTarget GetTarget<TTarget>() => (TTarget)_instance;
-
-        public TComponent GetComponent<TComponent>() => this switch
+        private readonly struct TargetHolder : ITargetHolder
         {
-            TComponent component => component,
-            _ when _instance is TComponent component => component,
-            _ => throw new InvalidOperationException($"Extension {typeof(TComponent)} not available")
-        };
+            private readonly WorkflowContext _context;
+
+            public TargetHolder(WorkflowContext context) => _context = context;
+
+            public TTarget GetTarget<TTarget>() => (TTarget)_context._instance;
+
+            public TComponent GetComponent<TComponent>()
+            {
+                if (_context is TComponent contextComponent)
+                {
+                    return contextComponent;
+                }
+
+                if (_context._instance is TComponent instanceComponent)
+                {
+                    return instanceComponent;
+                }
+
+                throw new InvalidOperationException($"Extension {typeof(TComponent)} not available");
+            }
+        }
     }
 }
