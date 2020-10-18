@@ -2,7 +2,6 @@
 using Hagar;
 using Hagar.Invocation;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -21,7 +20,7 @@ namespace CallLog
     internal class WorkflowContext : IWorkflowContext, IWorkflowControl
     {
         private readonly object _lock = new object();
-        private readonly Dictionary<long, RequestState> _callbacks = new Dictionary<long, RequestState>();
+        private readonly Dictionary<long, RequestState> _outboundRequests = new Dictionary<long, RequestState>();
         private readonly Guid _invocationId;
         private readonly Channel<object> _logStage;
         private readonly ILogger<WorkflowContext> _log;
@@ -32,6 +31,7 @@ namespace CallLog
         private readonly IdSpan _id;
         private readonly Queue<Message> _messageQueue = new Queue<Message>();
         private readonly TargetHolder _targetHolder;
+        private bool _recoveryComplete;
         private long _sequenceNumber;
         private Message _currentMessage;
         private object _instance;
@@ -118,18 +118,37 @@ namespace CallLog
                     });
 
                 // Enumerate all log messages into buffer.
+                var recoveredEntries = new List<object>();
                 var entries = _logEnumerator.GetCommittedLogEntries(_id);
+                long lastResponseSeq = -1;
                 await foreach (var entry in entries.Reader.ReadAllAsync())
                 {
-                    OnCommittedMessage(entry);
+                    recoveredEntries.Add(entry);
 
-                    if ((entry as Message)?.Body is ActivationMarker marker && marker.InvocationId == _invocationId)
+                    if (entry is Message message)
                     {
-                        // We have reached the end of the recovery portion of the log.
-                        break;
+                        var body = message.Body;
+                        if (body is Response response)
+                        {
+                            // In order to prevent re-sending requests for which responses have already been received,
+                            // record the response now. Additionally, record the order in which responses must be completed.
+                            var sequenceNumber = message.SequenceNumber;
+                            OnCommittedResponse(sequenceNumber, response, lastResponseSeq);
+                            lastResponseSeq = sequenceNumber;
+                        }
+                        else if (body is ActivationMarker marker && marker.InvocationId == _invocationId)
+                        {
+                            // We have reached the end of the recovery portion of the log.
+                            break;
+                        }
                     }
                 }
 
+                foreach (var entry in recoveredEntries)
+                {
+                    OnCommittedMessage(entry);
+                }
+                
                 // Start pumping newly added messages.
                 // TODO: Ideally, we would be pumping them already (for performance), but just not sending them to the committed message handlers until now.
                 _runTask = RunLogWriter();
@@ -146,6 +165,7 @@ namespace CallLog
             CurrentVersion = marker.Version;
             if (marker.InvocationId == _invocationId)
             {
+                _recoveryComplete = true;
                 _log.LogInformation("{Id} recovered with InvocationId {InvocationId}", _id.ToString(), _invocationId);
             }
             else
@@ -172,40 +192,107 @@ namespace CallLog
             }
         }
 
-        public void OnCommittedResponse(Message message)
-        {
-            var sequenceNumber = message.SequenceNumber;
+        public void OnCommittedResponse(Message message, long afterRequestNumber = -1) => OnCommittedResponse(message.SequenceNumber, (Response)message.Body, afterRequestNumber);
 
+        public void OnCommittedResponse(long sequenceNumber, Response response, long afterResponseNumber = -1)
+        {
             // Sequence numbers less than zero are used for control messages.
             if (sequenceNumber < 0)
             {
                 return;
             }
 
-            var response = (Response)message.Body;
-
             bool removed = false;
             RequestState state;
             lock (_lock)
             {
-                removed = _callbacks.Remove(sequenceNumber, out state);
-                if (!removed)
+                if (afterResponseNumber >= 0)
                 {
-                    // Register the response for later execution, when the request is made.
-                    _callbacks[sequenceNumber] = new RequestState { Response = response };
-                }
-            }
+                    if (_outboundRequests.TryGetValue(afterResponseNumber, out var dependsOn))
+                    {
+                        // Register a dependency.
+                        if (dependsOn.Dependent != -1)
+                        {
+                            throw new InvalidOperationException($"Response {afterResponseNumber} is already set to signal response {dependsOn.Dependent} and cannot signal response {sequenceNumber}");
+                        }
 
-            if (removed)
-            {
-                if (state.Completion is object)
-                {
-                    state.Completion.Complete(response);
+                        dependsOn.Dependent = sequenceNumber;
+                        _outboundRequests[afterResponseNumber] = dependsOn;
+
+                        state = new RequestState
+                        {
+                            Response = response,
+                            Dependent = -1,
+                            DependsOn = afterResponseNumber,
+                        };
+                        _outboundRequests[sequenceNumber] = state;
+                    }
+                    else
+                    {
+                        // The dependency must have already been satisfied.
+                        _outboundRequests.TryGetValue(sequenceNumber, out state);
+                        state.Response = response;
+                        state.Dependent = -1;
+                        state.DependsOn = -1;
+                        _outboundRequests[sequenceNumber] = state;
+                    }
                 }
                 else
                 {
-                    _log.LogWarning("Received duplicate response {Id}", sequenceNumber);
+                    removed = _outboundRequests.Remove(sequenceNumber, out state);
+                    state.Response = response;
+
+                    if (state.Completion is null || state.DependsOn != -1)
+                    {
+                        // Add it back, since it is not ready to be executed yet.
+                        _outboundRequests.Add(sequenceNumber, state);
+                    }
+
+                    if (!removed)
+                    {
+                        // Register the response for later execution, when the request is made.
+                        _outboundRequests[sequenceNumber] = new RequestState
+                        {
+                            Response = response,
+                            Dependent = -1,
+                            DependsOn = -1,
+                        };
+                    }
                 }
+            }
+
+            if (removed && state.DependsOn == -1 && state.Completion is object)
+            {
+                CompleteRequest(this, state);
+            }
+        }
+
+        private static void TryCompleteRequest(WorkflowContext context, long sequenceNumber)
+        {
+            if (context._outboundRequests.Remove(sequenceNumber, out var state))
+            {
+                if (state.Completion is object)
+                {
+                    CompleteRequest(context, state);
+                }
+                else
+                {
+                    state.DependsOn = -1;
+                    context._outboundRequests[sequenceNumber] = state;
+                }
+            }
+            else
+            {
+                context._log.LogInformation("`sdafsfsadfasd");
+            }
+        }
+
+        private static void CompleteRequest(WorkflowContext context, RequestState state)
+        {
+            state.Completion.Complete(state.Response);
+            if (state.Dependent >= 0)
+            {
+                TryCompleteRequest(context, state.Dependent);
             }
         }
 
@@ -340,7 +427,7 @@ namespace CallLog
         /// <param name="completion"></param>
         /// <param name="sequenceNumber"></param>
         /// <returns></returns>
-        public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
+        public bool OnCreateRequest(IResponseCompletionSource completion, out long sequenceNumber)
         {
             var previousContext = RuntimeContext.Current;
             RuntimeContext.Current = this;
@@ -353,7 +440,8 @@ namespace CallLog
                     // Get a unique id for this request.
                     var messageId = ++_sequenceNumber;
                     sequenceNumber = messageId;
-                    if (_callbacks.TryAdd(messageId, new RequestState { Completion = completion }))
+                    state = new RequestState { Completion = completion, Dependent = -1, DependsOn = -1 };
+                    if (_outboundRequests.TryAdd(messageId, state))
                     {
                         added = true;
                         state = default;
@@ -363,15 +451,20 @@ namespace CallLog
                         // This request has already been sent and a reponse has been received.
                         // Avoid sending the request again. The response will be replayed during recovery to unblock the request.
                         added = false;
-                        var removed = _callbacks.Remove(messageId, out state);
+                        var removed = _outboundRequests.Remove(messageId, out state);
+                        if (state.Completion is object)
+                        {
+                            throw new InvalidOperationException($"Duplicate request for sequence number {sequenceNumber}");
+                        }
+
+                        state.Completion = completion;
                         Debug.Assert(removed);
                     }
                 }
 
-                if (!added)
+                if (!added && state.DependsOn == -1)
                 {
-                    // Complete the already-seen request with the existing response.
-                    completion.Complete(state.Response);
+                    CompleteRequest(this, state);
                 }
 
                 return added;
@@ -400,7 +493,7 @@ namespace CallLog
                         {
                             replayAfter = _sequenceNumber;
                             if (msg.SequenceNumber <= _sequenceNumber
-                                && (!_callbacks.TryGetValue(msg.SequenceNumber, out var pending) || pending.Response is object || pending.Completion is null))
+                                && (!_outboundRequests.TryGetValue(msg.SequenceNumber, out var pending) || pending.Response is object || pending.Completion is null))
                             {
                                 if (_log.IsEnabled(LogLevel.Trace))
                                 {

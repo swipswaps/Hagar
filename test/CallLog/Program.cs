@@ -84,7 +84,7 @@ namespace CallLog
             RuntimeContext.Current = _context;
 
             var count = await proxy.GetCounter();
-            if (count >= 100)
+            if (count >= 200)
             {
                 _log.LogInformation("Stopping client calls because count is exceeded");
                 return;
@@ -95,7 +95,7 @@ namespace CallLog
                 count = await proxy.Increment();
 
                 //_log.LogInformation("Got result: {DateTime} and count {Count}", result, count);
-                if (count >= 100)
+                if (count >= 200)
                 {
                     _log.LogInformation("Stopping client calls because count is exceeded");
                     return;
@@ -123,53 +123,6 @@ namespace CallLog
     {
     }
 
-    internal struct RequestState
-    {
-        public Response Response { get; set; }
-        public IResponseCompletionSource Completion { get; set; }
-    }
-
-    [GenerateSerializer]
-    internal class ActivationMarker : IInvokable 
-    {
-        /// <summary>
-        /// The time of this activation.
-        /// </summary>
-        [Id(1)]
-        public DateTime Time { get; set; }
-
-        /// <summary>
-        /// The unique identifier for this activation.
-        /// </summary>
-        [Id(2)]
-        public Guid InvocationId { get; set; }
-
-        /// <summary>
-        /// The version of the grain at the time of this activation.
-        /// </summary>
-        [Id(3)]
-        public int Version { get; set; }
-
-        public int ArgumentCount => 0;
-
-        public void Dispose()
-        {
-        }
-
-        public TArgument GetArgument<TArgument>(int index) => default;
-        public TTarget GetTarget<TTarget>() => default;
-        public ValueTask<Response> Invoke()
-        {
-            ((WorkflowContext)RuntimeContext.Current).OnActivationMarker(this);
-            return new ValueTask<Response>(Response.Completed);
-        }
-
-        public void SetArgument<TArgument>(int index, in TArgument value) { }
-
-        public void SetTarget<TTargetHolder>(TTargetHolder holder) where TTargetHolder : ITargetHolder
-        { }
-    }
-
     public class WorkflowEnvironment
     {
         public static ValueTask<DateTime> GetUtcNow() => Promise.Record(() => DateTime.UtcNow);
@@ -181,7 +134,7 @@ namespace CallLog
         {
             var completion = ResponseCompletionSourcePool.Get<T>();
             var current = RuntimeContext.Current;
-            if (current.PrepareRequest(completion, out var sequenceNumber))
+            if (current.OnCreateRequest(completion, out var sequenceNumber))
             {
                 current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromResult<T>(func()), });
             }    
@@ -223,7 +176,7 @@ namespace CallLog
 
         void OnMessage(object message);
 
-        bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber);
+        bool OnCreateRequest(IResponseCompletionSource completion, out long sequenceNumber);
 
         ValueTask DeactivateAsync();
     }
@@ -262,7 +215,7 @@ namespace CallLog
             public ValueTask ActivateAsync() => default;
             public ValueTask DeactivateAsync() => default;
             public void OnMessage(object message) { }
-            public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
+            public bool OnCreateRequest(IResponseCompletionSource completion, out long sequenceNumber)
             {
                 sequenceNumber = Interlocked.Increment(ref _sequenceNumber);
                 return true;
@@ -355,11 +308,10 @@ namespace CallLog
         private readonly ConcurrentDictionary<IdSpan, RecoveryState> _recoveryChannels = new ConcurrentDictionary<IdSpan, RecoveryState>();
         private readonly Serializer<LogEntry> _entrySerializer;
         private readonly FasterLog _dbLog;
-        private readonly Catalog _catalog;
         private readonly CancellationTokenSource _shutdownCancellation = new CancellationTokenSource();
         private Task _runTask;
 
-        public LogEnumerator(LogManager logManager, Catalog catalog, Serializer<LogEntry> entrySerializer, ILogger<LogEnumerator> log)
+        public LogEnumerator(LogManager logManager, Serializer<LogEntry> entrySerializer, ILogger<LogEnumerator> log)
         {
             _entryChannel = Channel.CreateUnbounded<LogEntryHolder>(new UnboundedChannelOptions
             {
@@ -369,7 +321,6 @@ namespace CallLog
             _entryChannelReader = _entryChannel.Reader;
             _entryChannelWriter = _entryChannel.Writer;
             _dbLog = logManager.Log;
-            _catalog = catalog;
             _entrySerializer = entrySerializer;
             _log = log;
         }
@@ -500,7 +451,7 @@ namespace CallLog
             }
         }
 
-        public bool PrepareRequest(IResponseCompletionSource completion, out long sequenceNumber)
+        public bool OnCreateRequest(IResponseCompletionSource completion, out long sequenceNumber)
         {
             var requestId = Interlocked.Increment(ref _nextRequestId);
             sequenceNumber = requestId;
@@ -530,7 +481,7 @@ namespace CallLog
                 throw new InvalidOperationException("No RuntimeContext set. Set a runtime context before making calls");
             }
 
-            if (caller.PrepareRequest(callback, out var sequenceNumber))
+            if (caller.OnCreateRequest(callback, out var sequenceNumber))
             {
                 // Send the message only if the sender signals that it should be sent.
                 var callerId = caller.Id;
