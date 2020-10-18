@@ -244,11 +244,11 @@ namespace CallLog
 
                     if (state.Completion is null || state.DependsOn != -1)
                     {
-                        // Add it back, since it is not ready to be executed yet.
+                        // Add it back with the response value set, since it is not ready to be executed yet.
                         _outboundRequests.Add(sequenceNumber, state);
+                        removed = false;
                     }
-
-                    if (!removed)
+                    else if (!removed)
                     {
                         // Register the response for later execution, when the request is made.
                         _outboundRequests[sequenceNumber] = new RequestState
@@ -261,7 +261,7 @@ namespace CallLog
                 }
             }
 
-            if (removed && state.DependsOn == -1 && state.Completion is object)
+            if (removed)
             {
                 CompleteRequest(this, state);
             }
