@@ -53,7 +53,7 @@ namespace CallLog
         {
             if (cycles <= 0)
             {
-                var time = await WorkflowEnvironment.GetUtcNow();
+                var time = await WorkflowAction.GetUtcNow();
                 _log.LogInformation("{Id}.{MsgId} says PINGPONG FRIEND at {DateTime}!", _id.ToString(), _msgId++.ToString(), time);
                 return time;
             }

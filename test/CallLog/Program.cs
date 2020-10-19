@@ -118,80 +118,6 @@ namespace CallLog
         public static IWorkflowContext Current { get => _runtimeContext.Value; set => _runtimeContext.Value = value; }
     }
 
-    [GenerateMethodSerializers(typeof(WorkflowProxyBase))]
-    public interface IWorkflow
-    {
-    }
-
-    public class WorkflowEnvironment
-    {
-        public static ValueTask<DateTime> GetUtcNow() => Promise.Record(() => DateTime.UtcNow);
-
-        public static ValueTask Delay(TimeSpan duration) => Promise.RecordAsync(async () => await Task.Delay(duration));
-    }
-
-    public class Promise
-    {
-        public static ValueTask<T> Record<T>(Func<T> func)
-        {
-            var completion = ResponseCompletionSourcePool.Get<T>();
-            var current = RuntimeContext.Current;
-            if (current.OnCreateRequest(completion, out var sequenceNumber))
-            {
-                try
-                {
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromResult<T>(func()), });
-                }
-                catch (Exception exception)
-                {
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromException<T>(exception) });
-                }
-            }    
-
-            return completion.AsValueTask();
-        }
-
-        public static async ValueTask<T> RecordAsync<T>(Func<Task<T>> func)
-        {
-            var completion = ResponseCompletionSourcePool.Get<T>();
-            var current = RuntimeContext.Current;
-            if (current.OnCreateRequest(completion, out var sequenceNumber))
-            {
-                try
-                {
-                    var result = await func();
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromResult<T>(result) });
-                }
-                catch (Exception exception)
-                {
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromException<T>(exception) });
-                }
-            }    
-
-            return await completion.AsValueTask();
-        }
-
-        public static async ValueTask RecordAsync(Func<Task> func)
-        {
-            var completion = ResponseCompletionSourcePool.Get<int>();
-            var current = RuntimeContext.Current;
-            if (current.OnCreateRequest(completion, out var sequenceNumber))
-            {
-                try
-                {
-                    await func();
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromResult<int>(0) });
-                }
-                catch (Exception exception)
-                {
-                    current.OnMessage(new Message { SenderId = current.Id, SequenceNumber = sequenceNumber, Body = Response.FromException<int>(exception) });
-                }
-            }    
-
-            await completion.AsVoidValueTask();
-        }
-    }
-
     [GenerateSerializer]
     public class Message
     {
@@ -215,19 +141,6 @@ namespace CallLog
 
         [Id(2)]
         public object Payload { get; set; }
-    }
-
-    public interface IWorkflowContext
-    {
-        IdSpan Id { get; }
-
-        ValueTask ActivateAsync();
-
-        void OnMessage(object message);
-
-        bool OnCreateRequest(IResponseCompletionSource completion, out long sequenceNumber);
-
-        ValueTask DeactivateAsync();
     }
 
     internal class Catalog 

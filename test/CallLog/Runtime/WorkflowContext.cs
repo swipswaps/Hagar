@@ -242,7 +242,7 @@ namespace CallLog
                     removed = _outboundRequests.Remove(sequenceNumber, out state);
                     state.Response = response;
 
-                    if (state.Completion is null || state.DependsOn != -1)
+                    if (removed && (state.Completion is null || state.DependsOn != -1))
                     {
                         // Add it back with the response value set, since it is not ready to be executed yet.
                         _outboundRequests.Add(sequenceNumber, state);
