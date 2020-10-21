@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -15,6 +16,8 @@ namespace CallLog
     internal interface IWorkflowControl
     {
         ValueTask OnActivationMarker(ActivationMarker marker);
+
+        ValueTask CancelRunningRequests();
     }
 
     internal class WorkflowContext : IWorkflowContext, IWorkflowControl
@@ -31,7 +34,6 @@ namespace CallLog
         private readonly IdSpan _id;
         private readonly Queue<Message> _messageQueue = new Queue<Message>();
         private readonly TargetHolder _targetHolder;
-        private bool _recoveryComplete;
         private long _sequenceNumber;
         private Message _currentMessage;
         private object _instance;
@@ -62,7 +64,18 @@ namespace CallLog
 
         public IdSpan Id => _id;
 
-        public object Instance { get => _instance; set => _instance = value; }
+        public object Instance
+        {
+            get => _instance;
+            set
+            {
+                _instance = value;
+                if (value is IHasWorkflowContext hasContext)
+                {
+                    hasContext.Context = this;
+                }
+            }
+        }
 
         public int MaxSupportedVersion { get; set; } = 2;
 
@@ -148,7 +161,7 @@ namespace CallLog
                 {
                     OnCommittedMessage(entry);
                 }
-                
+
                 // Start pumping newly added messages.
                 // TODO: Ideally, we would be pumping them already (for performance), but just not sending them to the committed message handlers until now.
                 _runTask = RunLogWriter();
@@ -165,7 +178,6 @@ namespace CallLog
             CurrentVersion = marker.Version;
             if (marker.InvocationId == _invocationId)
             {
-                _recoveryComplete = true;
                 _log.LogInformation("{Id} recovered with InvocationId {InvocationId}", _id.ToString(), _invocationId);
             }
             else
@@ -520,6 +532,31 @@ namespace CallLog
 
                 writeQueue.Clear();
             }
+        }
+
+        public ValueTask CancelRunningRequests()
+        {
+            var allRequests = _outboundRequests.ToList();
+            var cancelledRequest = new List<long>();
+            for (int i = 0; i < allRequests.Count; ++i)
+            {
+                var request = allRequests[i];
+                var (sequenceNumber, state) = (request.Key, request.Value);
+                if (state.Response is null && state.Completion is object)
+                {
+                    state.Response = Response.FromException<object>(new TaskCanceledException("Running requests have been canceled"));
+                }
+
+                _outboundRequests[sequenceNumber] = state;
+                cancelledRequest.Add(sequenceNumber);
+            }
+
+            foreach (var sequenceNumber in cancelledRequest)
+            {
+                TryCompleteRequest(this, sequenceNumber);
+            }
+
+            return default;
         }
 
         private readonly struct TargetHolder : ITargetHolder

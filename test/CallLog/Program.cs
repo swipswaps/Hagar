@@ -24,6 +24,7 @@ namespace CallLog
             {
                 services.AddHagar(hagar =>
                 {
+                    Thread.Sleep(4000);
                     hagar
                         .AddAssembly(typeof(Program).Assembly)
                         .AddISerializableSupport();
@@ -83,23 +84,18 @@ namespace CallLog
             var proxy = _proxyFactory.GetProxy<ICounterWorkflow, WorkflowProxyBase>(id);
             RuntimeContext.Current = _context;
 
-            var count = await proxy.GetCounter();
-            if (count >= 200)
-            {
-                _log.LogInformation("Stopping client calls because count is exceeded");
-                return;
-            }
             while (!stoppingToken.IsCancellationRequested)
             {
-                var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
-                count = await proxy.Increment();
-
-                //_log.LogInformation("Got result: {DateTime} and count {Count}", result, count);
-                if (count >= 200)
+                var count = await proxy.GetCounter();
+                if (count >= 290)
                 {
                     _log.LogInformation("Stopping client calls because count is exceeded");
                     return;
                 }
+
+                var result = await proxy.PingPongFriend(IdSpan.Create("counter2"), 1);
+                count = await proxy.Increment();
+                //_log.LogInformation("Got result: {DateTime} and count {Count}", result, count);
 
                 await Task.Delay(100);
             }

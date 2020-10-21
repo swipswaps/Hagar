@@ -247,7 +247,7 @@ namespace CallLog.Scheduling
                         var taskLength = stopwatch.Elapsed - taskStart;
                         if (taskLength > TimeSpan.FromSeconds(1))
                         {
-                            _log.LogWarning(
+                            _log.LogDebug(
                                 "Task {Task} in WorkGroup {GrainContext} took elapsed time {Duration} for execution, which is longer than {TurnWarningLengthThreshold}. Running on thread {Thread}",
                                 task,
                                 _context.ToString(),
