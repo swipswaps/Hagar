@@ -58,6 +58,7 @@ namespace Hagar.Codecs
                 return ReferenceCodec.ReadReference<Type, TInput>(ref reader, field);
             }
 
+            ReferenceCodec.MarkValueField(reader.Session);
             uint fieldId = 0;
             var schemaType = default(SchemaType);
             uint id = 0;
