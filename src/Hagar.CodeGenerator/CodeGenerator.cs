@@ -13,7 +13,7 @@ namespace Hagar.CodeGenerator
 {
     public class CodeGeneratorOptions
     {
-        public string[] GenerateSerializerAttributes { get; set; } //= new[] { "System.SerializableAttribute" };
+        public string[] GenerateSerializerAttributes { get; set; } = new[] { "System.SerializableAttribute" };
 
         public List<string> IdAttributeTypes { get; set; } = new List<string> { "Hagar.IdAttribute" };
 

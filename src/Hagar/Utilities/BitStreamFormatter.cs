@@ -35,7 +35,7 @@ namespace Hagar.Utilities
                 var exists = reader.Session.ReferencedObjects.TryGetReferencedObject(refId, out _);
                 res.Append('[');
                 PrintField(res, reader.Session, field, id, typeName);
-                res.Append($" Reference: {reader.Session.ReferencedObjects.CurrentReferenceId} ({(exists ? "exists" : "unknown")})");
+                res.Append($" Reference: {refId} ({(exists ? "exists" : "unknown")})");
                 res.Append(']');
                 return;
             }

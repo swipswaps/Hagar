@@ -126,7 +126,7 @@ namespace TestApp
             {
                 using var readerSession = sessionPool.GetSession();
                 var reader = Reader.Create(readResult.Buffer, readerSession);
-                var result = BitstreamAnalyzer.Format(ref reader);
+                var result = BitStreamFormatter.Format(ref reader);
                 Console.WriteLine(result);
             }
 
@@ -221,7 +221,7 @@ namespace TestApp
             {
                 using var readerSesssion = getSession();
                 var reader = Reader.Create(readResult.Buffer, readerSesssion);
-                var result = BitstreamAnalyzer.Format(ref reader);
+                var result = BitStreamFormatter.Format(ref reader);
                 Console.WriteLine(result);
             }
             {

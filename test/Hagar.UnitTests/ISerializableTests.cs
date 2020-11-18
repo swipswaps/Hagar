@@ -70,7 +70,7 @@ namespace Hagar.UnitTests
             {
                 using var readerSession = _sessionPool.GetSession();
                 var reader = Reader.Create(readResult.Buffer, readerSession);
-                var output = BitStreamAnalyzer.Format(ref reader);
+                var output = BitStreamFormatter.Format(ref reader);
                 _log.WriteLine(output);
             }
  

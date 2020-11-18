@@ -9,7 +9,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Pipelines;
 using System.Linq;
-using System.Runtime.InteropServices.ComTypes;
 using Xunit;
 
 namespace Hagar.TestKit
@@ -160,6 +159,7 @@ namespace Hagar.TestKit
                 var writer = Writer.CreatePooled(buffer, _sessionPool.GetSession());
                 serializer.Serialize(original, ref writer);
                 buffer.Flush();
+                writer.Output.Dispose();
 
                 buffer.Position = 0;
                 var reader = Reader.Create(buffer, _sessionPool.GetSession());
@@ -306,6 +306,18 @@ namespace Hagar.TestKit
                 {
                     var buffer = new MemoryStream();
                     var writer = Writer.CreatePooled(buffer, _sessionPool.GetSession());
+                    serializer.Serialize(original, ref writer);
+                    buffer.Flush();
+                    buffer.SetLength(buffer.Position);
+                    buffer.Position = 0;
+                    var result = buffer.ToArray();
+                    writer.Output.Dispose();
+                    Assert.Equal(expected, result);
+                }
+
+                {
+                    var buffer = new MemoryStream();
+                    var writer = Writer.Create((Stream)buffer, _sessionPool.GetSession());
                     serializer.Serialize(original, ref writer);
                     buffer.Flush();
                     buffer.SetLength(buffer.Position);
