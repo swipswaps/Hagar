@@ -20,6 +20,7 @@ namespace Hagar.CodeGenerator
         private const string DeserializeMethodName = "Deserialize";
         private const string WriteFieldMethodName = "WriteField";
         private const string ReadValueMethodName = "ReadValue";
+        private const string CodecFieldTypeFieldName = "_codecFieldType";
 
         public static ClassDeclarationSyntax GenerateSerializer(LibraryTypes libraryTypes, ISerializableTypeDescription type, Dictionary<string, List<MemberDeclarationSyntax>> partialTypeSerializers)
         {
@@ -146,6 +147,13 @@ namespace Hagar.CodeGenerator
                                     SingletonSeparatedList(VariableDeclarator(type.FieldName)
                                         .WithInitializer(EqualsValueClause(TypeOfExpression(type.UnderlyingType.ToTypeSyntax()))))))
                             .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword));
+                    case CodecFieldTypeFieldDescription type:
+                        return FieldDeclaration(
+                                VariableDeclaration(
+                                    type.FieldType,
+                                    SingletonSeparatedList(VariableDeclarator(type.FieldName)
+                                        .WithInitializer(EqualsValueClause(TypeOfExpression(type.CodecFieldType))))))
+                            .AddModifiers(Token(SyntaxKind.PrivateKeyword), Token(SyntaxKind.StaticKeyword), Token(SyntaxKind.ReadOnlyKeyword));
                     case SetterFieldDescription setter:
                         {
                             var fieldSetterVariable = VariableDeclarator(setter.FieldName);
@@ -266,6 +274,8 @@ namespace Hagar.CodeGenerator
             fields.AddRange(serializableTypeDescription.Members.Select(m => GetExpectedType(m.Type)).Distinct(SymbolEqualityComparer.Default).OfType<ITypeSymbol>().Select(GetTypeDescription));
 #pragma warning restore RS1024 // Compare symbols correctly
 
+            fields.Add(new CodecFieldTypeFieldDescription(libraryTypes.Type.ToTypeSyntax(), CodecFieldTypeFieldName, serializableTypeDescription.TypeSyntax)); 
+
             if (serializableTypeDescription.HasComplexBaseType)
             {
                 fields.Add(new PartialSerializerFieldDescription(libraryTypes.PartialSerializer.Construct(serializableTypeDescription.BaseType).ToTypeSyntax(), BaseTypeSerializerFieldName));
@@ -309,7 +319,7 @@ namespace Hagar.CodeGenerator
 
             TypeFieldDescription GetTypeDescription(ITypeSymbol t)
             {
-                var fieldName = ToLowerCamelCase(t.GetValidIdentifier()) + "Type";
+                var fieldName = '_' + ToLowerCamelCase(t.GetValidIdentifier()) + "Type";
                 return new TypeFieldDescription(libraryTypes.Type.ToTypeSyntax(), fieldName, t);
             }
 
@@ -644,13 +654,13 @@ namespace Hagar.CodeGenerator
 
             // Generate the most appropriate expression to get the field type.
             ExpressionSyntax valueTypeInitializer = type.IsValueType switch {
-                true => TypeOfExpression(type.TypeSyntax),
+                true => IdentifierName(CodecFieldTypeFieldName),
                 false => ConditionalAccessExpression(valueParam, InvocationExpression(MemberBindingExpression(IdentifierName("GetType"))))
             };
 
             ExpressionSyntax valueTypeExpression = type.IsSealedType switch
             {
-                true => valueTypeInitializer,
+                true => IdentifierName(CodecFieldTypeFieldName),
                 false => valueTypeField
             };
 
@@ -708,7 +718,7 @@ namespace Hagar.CodeGenerator
                     IfStatement(
                         BinaryExpression(SyntaxKind.LogicalOrExpression,
                         IsPatternExpression(valueTypeField, ConstantPattern(LiteralExpression(SyntaxKind.NullLiteralExpression))),
-                        BinaryExpression(SyntaxKind.EqualsExpression, valueTypeField, TypeOfExpression(type.TypeSyntax))),
+                        BinaryExpression(SyntaxKind.EqualsExpression, valueTypeField, IdentifierName(CodecFieldTypeFieldName))),
                         Block(innerBody),
                         ElseClause(Block(new StatementSyntax[]
                         {
@@ -834,7 +844,7 @@ namespace Hagar.CodeGenerator
                     IfStatement(
                         BinaryExpression(SyntaxKind.LogicalOrExpression,
                         IsPatternExpression(valueTypeField, ConstantPattern(LiteralExpression(SyntaxKind.NullLiteralExpression))),
-                        BinaryExpression(SyntaxKind.EqualsExpression, valueTypeField, TypeOfExpression(type.TypeSyntax))),
+                        BinaryExpression(SyntaxKind.EqualsExpression, valueTypeField, IdentifierName(CodecFieldTypeFieldName))),
                         Block(innerBody)));
 
                 body.Add(ReturnStatement(
@@ -993,6 +1003,17 @@ namespace Hagar.CodeGenerator
             }
 
             public ITypeSymbol UnderlyingType { get; }
+            public override bool IsInjected => false;
+        }
+
+        internal class CodecFieldTypeFieldDescription : FieldDescription
+        {
+            public CodecFieldTypeFieldDescription(TypeSyntax fieldType, string fieldName, TypeSyntax codecFieldType) : base(fieldType, fieldName)
+            {
+                CodecFieldType = codecFieldType;
+            }
+
+            public TypeSyntax CodecFieldType { get; }
             public override bool IsInjected => false;
         }
 
