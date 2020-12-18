@@ -2,12 +2,15 @@ using Hagar.Buffers;
 using Hagar.WireProtocol;
 using System;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Hagar.Codecs
 {
     [RegisterSerializer]
     public sealed class FloatCodec : TypedCodecBase<float, FloatCodec>, IFieldCodec<float>
     {
+        private static readonly Type CodecFieldType = typeof(float);
+
         void IFieldCodec<float>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
             uint fieldIdDelta,
             Type expectedType,
@@ -16,7 +19,7 @@ namespace Hagar.Codecs
         public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, float value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
-            writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(float), WireType.Fixed32);
+            writer.WriteFieldHeader(fieldIdDelta, expectedType, CodecFieldType, WireType.Fixed32);
 
             // TODO: Optimize
             writer.Write((uint)BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
@@ -52,9 +55,11 @@ namespace Hagar.Codecs
             }
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowWireTypeOutOfRange(WireType wireType) => throw new ArgumentOutOfRangeException(
             $"{nameof(wireType)} {wireType} is not supported by this codec.");
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowValueOutOfRange<T>(T value) => throw new ArgumentOutOfRangeException(
             $"The {typeof(T)} value has a magnitude too high {value} to be converted to {typeof(float)}.");
     }
@@ -62,6 +67,8 @@ namespace Hagar.Codecs
     [RegisterSerializer]
     public sealed class DoubleCodec : TypedCodecBase<double, DoubleCodec>, IFieldCodec<double>
     {
+        private static readonly Type CodecFieldType = typeof(double);
+
         void IFieldCodec<double>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer,
             uint fieldIdDelta,
             Type expectedType,
@@ -70,7 +77,7 @@ namespace Hagar.Codecs
         public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, double value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
-            writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(double), WireType.Fixed64);
+            writer.WriteFieldHeader(fieldIdDelta, expectedType, CodecFieldType, WireType.Fixed64);
 
             // TODO: Optimize
             writer.Write((ulong)BitConverter.ToInt64(BitConverter.GetBytes(value), 0));
@@ -95,6 +102,7 @@ namespace Hagar.Codecs
             }
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowWireTypeOutOfRange(WireType wireType) => throw new ArgumentOutOfRangeException(
             $"{nameof(wireType)} {wireType} is not supported by this codec.");
     }
@@ -102,12 +110,14 @@ namespace Hagar.Codecs
     [RegisterSerializer]
     public sealed class DecimalCodec : TypedCodecBase<decimal, DecimalCodec>, IFieldCodec<decimal>
     {
+        private static readonly Type CodecFieldType = typeof(decimal);
+
         void IFieldCodec<decimal>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, decimal value) => WriteField(ref writer, fieldIdDelta, expectedType, value);
 
         public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, decimal value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
-            writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(decimal), WireType.Fixed128);
+            writer.WriteFieldHeader(fieldIdDelta, expectedType, CodecFieldType, WireType.Fixed128);
             var ints = decimal.GetBits(value);
             foreach (var part in ints)
             {
@@ -150,9 +160,11 @@ namespace Hagar.Codecs
             }
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowWireTypeOutOfRange(WireType wireType) => throw new ArgumentOutOfRangeException(
             $"{nameof(wireType)} {wireType} is not supported by this codec.");
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowValueOutOfRange<T>(T value) => throw new ArgumentOutOfRangeException(
             $"The {typeof(T)} value has a magnitude too high {value} to be converted to {typeof(decimal)}.");
 
