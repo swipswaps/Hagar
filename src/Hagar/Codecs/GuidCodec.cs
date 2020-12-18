@@ -8,6 +8,7 @@ namespace Hagar.Codecs
     [RegisterSerializer]
     public sealed class GuidCodec : IFieldCodec<Guid>
     {
+        public static readonly Type CodecFieldType = typeof(Guid);
         private const int Width = 16;
 
         void IFieldCodec<Guid>.WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, Guid value) => WriteField(ref writer, fieldIdDelta, expectedType, value);
@@ -15,7 +16,7 @@ namespace Hagar.Codecs
         public static void WriteField<TBufferWriter>(ref Writer<TBufferWriter> writer, uint fieldIdDelta, Type expectedType, Guid value) where TBufferWriter : IBufferWriter<byte>
         {
             ReferenceCodec.MarkValueField(writer.Session);
-            writer.WriteFieldHeader(fieldIdDelta, expectedType, typeof(Guid), WireType.Fixed128);
+            writer.WriteFieldHeader(fieldIdDelta, expectedType, CodecFieldType, WireType.Fixed128);
 #if NETCOREAPP
             writer.EnsureContiguous(Width);
             if (value.TryWriteBytes(writer.WritableSpan))
