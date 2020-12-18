@@ -10,11 +10,14 @@ namespace Hagar.CodeGenerator
 {
     internal class SerializableTypeDescription : ISerializableTypeDescription
     {
-        public SerializableTypeDescription(SemanticModel semanticModel, INamedTypeSymbol type, IEnumerable<IMemberDescription> members)
+        private readonly LibraryTypes _libraryTypes;
+
+        public SerializableTypeDescription(SemanticModel semanticModel, INamedTypeSymbol type, IEnumerable<IMemberDescription> members, LibraryTypes libraryTypes)
         {
             Type = type;
             Members = members.ToList();
             SemanticModel = semanticModel;
+            _libraryTypes = libraryTypes;
         }
 
         private INamedTypeSymbol Type { get; }
@@ -33,6 +36,7 @@ namespace Hagar.CodeGenerator
         public string Name => Type.Name;
 
         public bool IsValueType => Type.IsValueType;
+        public bool IsSealedType => Type.IsSealed;
         public bool IsEnumType => Type.EnumUnderlyingType != null;
 
         public bool IsGenericType => Type.IsGenericType;
@@ -85,6 +89,8 @@ namespace Hagar.CodeGenerator
                 return false;
             }
         }
+
+        public bool UseActivator => Type.HasAttribute(_libraryTypes.UseActivatorAttribute) || !IsEmptyConstructable;
 
         public ExpressionSyntax GetObjectCreationExpression(LibraryTypes libraryTypes) => InvocationExpression(ObjectCreationExpression(TypeSyntax));
     }
