@@ -11,6 +11,7 @@ namespace Hagar.CodeGenerator
         TypeSyntax UnboundTypeSyntax { get; }
         bool HasComplexBaseType { get; }
         INamedTypeSymbol BaseType { get; }
+        string Namespace { get; }
         string Name { get; }
         bool IsValueType { get; }
         bool IsEnumType { get; }
@@ -19,6 +20,7 @@ namespace Hagar.CodeGenerator
         List<IMemberDescription> Members { get; }
         SemanticModel SemanticModel { get; }
         bool IsEmptyConstructable { get; }
+        bool IsPartial { get; }
         ExpressionSyntax GetObjectCreationExpression(LibraryTypes libraryTypes);
     }
 }
