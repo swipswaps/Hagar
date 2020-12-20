@@ -13,13 +13,13 @@ namespace FakeFx.Runtime
         public const int LENGTH_META_HEADER = 4;
 
         [NonSerialized]
-        private string _targetHistory;
+        internal string _targetHistory;
 
         [NonSerialized]
-        private DateTime? _queuedTime;
+        internal DateTime? _queuedTime;
 
         [NonSerialized]
-        private int _retryCount;
+        internal int _retryCount;
 
         public string TargetHistory
         {
@@ -40,8 +40,8 @@ namespace FakeFx.Runtime
         }
         
         // Cache values of TargetAddess and SendingAddress as they are used very frequently
-        private ActivationAddress targetAddress;
-        private ActivationAddress sendingAddress;
+        internal ActivationAddress targetAddress;
+        internal ActivationAddress sendingAddress;
         
         static Message()
         {
@@ -354,7 +354,7 @@ namespace FakeFx.Runtime
             targetAddress = null;
         }
 
-        private static string GetNotNullString(string s)
+        internal static string GetNotNullString(string s)
         {
             return s ?? string.Empty;
         }
@@ -401,7 +401,7 @@ namespace FakeFx.Runtime
             return sb.ToString();
         }
         
-        private void AppendIfExists(HeadersContainer.Headers header, StringBuilder sb, Func<Message, object> valueProvider)
+        internal void AppendIfExists(HeadersContainer.Headers header, StringBuilder sb, Func<Message, object> valueProvider)
         {
             // used only under log3 level
             if ((Headers.GetHeadersMask() & header) != HeadersContainer.Headers.NONE)
@@ -507,61 +507,61 @@ namespace FakeFx.Runtime
             }
 
             [Hagar.Id(1)]
-            private Categories _category;
+            internal Categories _category;
             [Hagar.Id(2)]
-            private Directions? _direction;
+            internal Directions? _direction;
             [Hagar.Id(3)]
-            private bool _isReadOnly;
+            internal bool _isReadOnly;
             [Hagar.Id(4)]
-            private bool _isAlwaysInterleave;
+            internal bool _isAlwaysInterleave;
             [Hagar.Id(5)]
-            private bool _isUnordered;
+            internal bool _isUnordered;
             [Hagar.Id(6)]
-            private bool _isReturnedFromRemoteCluster;
+            internal bool _isReturnedFromRemoteCluster;
             [Hagar.Id(7)]
-            private bool _isTransactionRequired;
+            internal bool _isTransactionRequired;
             [Hagar.Id(8)]
-            private CorrelationId _id;
+            internal CorrelationId _id;
             [Hagar.Id(9)]
-            private int _forwardCount;
+            internal int _forwardCount;
             [Hagar.Id(10)]
-            private SiloAddress _targetSilo;
+            internal SiloAddress _targetSilo;
             [Hagar.Id(11)]
-            private GrainId _targetGrain;
+            internal GrainId _targetGrain;
             [Hagar.Id(12)]
-            private ActivationId _targetActivation;
+            internal ActivationId _targetActivation;
             [Hagar.Id(13)]
-            private SiloAddress _sendingSilo;
+            internal SiloAddress _sendingSilo;
             [Hagar.Id(14)]
-            private GrainId _sendingGrain;
+            internal GrainId _sendingGrain;
             [Hagar.Id(15)]
-            private ActivationId _sendingActivation;
+            internal ActivationId _sendingActivation;
             [Hagar.Id(16)]
-            private bool _isNewPlacement;
+            internal bool _isNewPlacement;
             [Hagar.Id(17)]
-            private ushort _interfaceVersion;
+            internal ushort _interfaceVersion;
             [Hagar.Id(18)]
-            private ResponseTypes _result;
+            internal ResponseTypes _result;
             [Hagar.Id(19)]
-            private object _transactionInfo;
+            internal object _transactionInfo;
             [Hagar.Id(20)]
-            private TimeSpan? _timeToLive;
+            internal TimeSpan? _timeToLive;
             [Hagar.Id(21)]
-            private List<ActivationAddress> _cacheInvalidationHeader;
+            internal List<ActivationAddress> _cacheInvalidationHeader;
             [Hagar.Id(22)]
-            private RejectionTypes _rejectionType;
+            internal RejectionTypes _rejectionType;
             [Hagar.Id(23)]
-            private string _rejectionInfo;
+            internal string _rejectionInfo;
             [Hagar.Id(24)]
-            private Dictionary<string, object> _requestContextData;
+            internal Dictionary<string, object> _requestContextData;
             [Hagar.Id(25)]
-            private CorrelationId _callChainId;
+            internal CorrelationId _callChainId;
             [Hagar.Id(26)]
-            private readonly DateTime _localCreationTime;
+            internal readonly DateTime _localCreationTime;
             [Hagar.Id(27)]
-            private TraceContext _traceContext;
+            internal TraceContext _traceContext;
             [Hagar.Id(28)]
-            private GrainInterfaceType interfaceType;
+            internal GrainInterfaceType interfaceType;
 
             public HeadersContainer()
             {
