@@ -14,7 +14,7 @@ namespace Hagar.Codecs
     internal sealed class MultiDimensionalArrayCodec<T> : IGeneralizedCodec
     {
         private static readonly Type DimensionFieldType = typeof(int[]);
-        private static readonly Type CodecElementType = typeof(int[]);
+        private static readonly Type CodecElementType = typeof(T);
 
         private readonly IFieldCodec<int[]> _intArrayCodec;
         private readonly IFieldCodec<T> _elementCodec;
