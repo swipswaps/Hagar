@@ -118,7 +118,7 @@ namespace Hagar.Codecs
     [RegisterSerializer]
     public sealed class UInt16Codec : TypedCodecBase<ushort, UInt16Codec>, IFieldCodec<ushort>
     {
-        private static readonly Type CodecFieldType = typeof(ushort);
+        public static readonly Type CodecFieldType = typeof(ushort);
 
         ushort IFieldCodec<ushort>.ReadValue<TInput>(ref Reader<TInput> reader, Field field) => ReadValue(ref reader, field);
 
