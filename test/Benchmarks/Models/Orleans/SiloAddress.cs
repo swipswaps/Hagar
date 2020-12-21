@@ -59,6 +59,8 @@ namespace FakeFx.Runtime
             return siloAddressInterningCache.FindOrCreate(new Key(ep, gen), k => new SiloAddress(k.Endpoint, k.Generation));
         }
 
+        public SiloAddress() { }
+
         private SiloAddress(IPEndPoint endpoint, int gen)
         {
             // Normalize endpoints
