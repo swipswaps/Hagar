@@ -491,6 +491,7 @@ namespace Hagar.CodeGenerator
                 .AddParameterListParameters(parameters)
                 .AddTypeParameterListParameters(TypeParameter("TBufferWriter"))
                 .AddConstraintClauses(TypeParameterConstraintClause("TBufferWriter").AddConstraints(TypeConstraint(libraryTypes.IBufferWriter.Construct(libraryTypes.Byte).ToTypeSyntax())))
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
         }
 
@@ -558,6 +559,7 @@ namespace Hagar.CodeGenerator
                 .AddTypeParameterListParameters(TypeParameter("TInput"))
                 .AddModifiers(Token(SyntaxKind.PublicKeyword))
                 .AddParameterListParameters(parameters)
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
 
             // Create the loop body.
@@ -794,6 +796,7 @@ namespace Hagar.CodeGenerator
                 .AddParameterListParameters(parameters)
                 .AddTypeParameterListParameters(TypeParameter("TBufferWriter"))
                 .AddConstraintClauses(TypeParameterConstraintClause("TBufferWriter").AddConstraints(TypeConstraint(libraryTypes.IBufferWriter.Construct(libraryTypes.Byte).ToTypeSyntax())))
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
         }
 
@@ -912,6 +915,7 @@ namespace Hagar.CodeGenerator
                 .AddTypeParameterListParameters(TypeParameter("TInput"))
                 .AddModifiers(Token(SyntaxKind.PublicKeyword))
                 .AddParameterListParameters(parameters)
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
         }
 
@@ -961,6 +965,7 @@ namespace Hagar.CodeGenerator
                 .AddParameterListParameters(parameters)
                 .AddTypeParameterListParameters(TypeParameter("TBufferWriter"))
                 .AddConstraintClauses(TypeParameterConstraintClause("TBufferWriter").AddConstraints(TypeConstraint(libraryTypes.IBufferWriter.Construct(libraryTypes.Byte).ToTypeSyntax())))
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
         }
 
@@ -994,6 +999,7 @@ namespace Hagar.CodeGenerator
                 .AddTypeParameterListParameters(TypeParameter("TInput"))
                 .AddModifiers(Token(SyntaxKind.PublicKeyword))
                 .AddParameterListParameters(parameters)
+                .AddAttributeLists(AttributeList(SingletonSeparatedList(CodeGenerator.GetMethodImplAttributeSyntax())))
                 .AddBodyStatements(body.ToArray());
         }
 
