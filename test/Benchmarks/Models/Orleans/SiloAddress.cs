@@ -21,17 +21,19 @@ namespace FakeFx.Runtime
     [Hagar.GenerateSerializer]
     public sealed class SiloAddress : IEquatable<SiloAddress>, IComparable<SiloAddress>, IComparable
     {
-        [Hagar.Id(1)]
+        [NonSerialized]
         private int hashCode = 0;
-        [Hagar.Id(2)]
+
+        [NonSerialized]
         private bool hashCodeSet = false;
 
         [NonSerialized]
         private List<uint> uniformHashCache;
 
-        [Hagar.Id(3)]
+        [Hagar.Id(0)]
         public IPEndPoint Endpoint { get; private set; }
-        [Hagar.Id(4)]
+
+        [Hagar.Id(1)]
         public int Generation { get; private set; }
 
         [NonSerialized]
