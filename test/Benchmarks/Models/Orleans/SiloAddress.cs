@@ -19,6 +19,7 @@ namespace FakeFx.Runtime
     [Serializable]
     [DebuggerDisplay("SiloAddress {ToString()}")]
     [Hagar.GenerateSerializer]
+    [Hagar.SuppressReferenceTracking]
     public sealed class SiloAddress : IEquatable<SiloAddress>, IComparable<SiloAddress>, IComparable
     {
         [NonSerialized]

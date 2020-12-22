@@ -4,6 +4,7 @@ namespace FakeFx.Runtime
 {
     [Serializable]
     [Hagar.GenerateSerializer]
+    [Hagar.SuppressReferenceTracking]
     internal sealed class CorrelationId : IEquatable<CorrelationId>, IComparable<CorrelationId>
     {
         [Hagar.Id(1)]

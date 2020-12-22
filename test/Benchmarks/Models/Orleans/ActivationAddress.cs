@@ -5,6 +5,7 @@ namespace FakeFx.Runtime
 {
     [Serializable, Immutable]
     [Hagar.GenerateSerializer]
+    [Hagar.SuppressReferenceTracking]
     public sealed class ActivationAddress : IEquatable<ActivationAddress>
     {
         [Hagar.Id(1)]

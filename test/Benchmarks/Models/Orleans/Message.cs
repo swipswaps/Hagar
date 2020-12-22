@@ -459,6 +459,7 @@ namespace FakeFx.Runtime
 
         [Serializable]
         [Hagar.GenerateSerializer]
+        [Hagar.SuppressReferenceTracking]
         public sealed class HeadersContainer
         {
             [Flags]

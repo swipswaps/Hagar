@@ -5,6 +5,7 @@ namespace FakeFx.Runtime
 {
     [Serializable]
     [Hagar.GenerateSerializer]
+    [Hagar.SuppressReferenceTracking]
     public sealed class ActivationId : IEquatable<ActivationId>
     {
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Security", "CA2104:DoNotDeclareReadOnlyMutableReferenceTypes")]

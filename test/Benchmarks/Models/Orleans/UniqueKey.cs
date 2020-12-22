@@ -9,6 +9,7 @@ namespace FakeFx.Runtime
 {
     [Serializable]
     [Hagar.GenerateSerializer]
+    [Hagar.SuppressReferenceTracking]
     public sealed class UniqueKey : IComparable<UniqueKey>, IEquatable<UniqueKey>
     {
         /// <summary>

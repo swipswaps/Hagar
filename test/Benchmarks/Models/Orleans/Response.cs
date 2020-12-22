@@ -5,6 +5,7 @@ namespace FakeFx.Runtime
     [Serializable]
     [Hagar.GenerateSerializer]
     [Hagar.WellKnownId(103)]
+    [Hagar.SuppressReferenceTracking]
     internal sealed class Response
     {
         [Hagar.Id(1)]
