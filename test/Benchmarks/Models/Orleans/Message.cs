@@ -460,6 +460,7 @@ namespace FakeFx.Runtime
         [Serializable]
         [Hagar.GenerateSerializer]
         [Hagar.SuppressReferenceTracking]
+        [Hagar.OmitDefaultMemberValues]
         public sealed class HeadersContainer
         {
             [Flags]
@@ -508,61 +509,61 @@ namespace FakeFx.Runtime
             }
 
             [Hagar.Id(1)]
-            internal Categories _category;
+            public Categories _category;
             [Hagar.Id(2)]
-            internal Directions? _direction;
+            public Directions? _direction;
             [Hagar.Id(3)]
-            internal bool _isReadOnly;
+            public bool _isReadOnly;
             [Hagar.Id(4)]
-            internal bool _isAlwaysInterleave;
+            public bool _isAlwaysInterleave;
             [Hagar.Id(5)]
-            internal bool _isUnordered;
+            public bool _isUnordered;
             [Hagar.Id(6)]
-            internal bool _isReturnedFromRemoteCluster;
+            public bool _isReturnedFromRemoteCluster;
             [Hagar.Id(7)]
-            internal bool _isTransactionRequired;
+            public bool _isTransactionRequired;
             [Hagar.Id(8)]
-            internal CorrelationId _id;
+            public CorrelationId _id;
             [Hagar.Id(9)]
-            internal int _forwardCount;
+            public int _forwardCount;
             [Hagar.Id(10)]
-            internal SiloAddress _targetSilo;
+            public SiloAddress _targetSilo;
             [Hagar.Id(11)]
-            internal GrainId _targetGrain;
+            public GrainId _targetGrain;
             [Hagar.Id(12)]
-            internal ActivationId _targetActivation;
+            public ActivationId _targetActivation;
             [Hagar.Id(13)]
-            internal SiloAddress _sendingSilo;
+            public SiloAddress _sendingSilo;
             [Hagar.Id(14)]
-            internal GrainId _sendingGrain;
+            public GrainId _sendingGrain;
             [Hagar.Id(15)]
-            internal ActivationId _sendingActivation;
+            public ActivationId _sendingActivation;
             [Hagar.Id(16)]
-            internal bool _isNewPlacement;
+            public bool _isNewPlacement;
             [Hagar.Id(17)]
-            internal ushort _interfaceVersion;
+            public ushort _interfaceVersion;
             [Hagar.Id(18)]
-            internal ResponseTypes _result;
+            public ResponseTypes _result;
             [Hagar.Id(19)]
-            internal object _transactionInfo;
+            public object _transactionInfo;
             [Hagar.Id(20)]
-            internal TimeSpan? _timeToLive;
+            public TimeSpan? _timeToLive;
             [Hagar.Id(21)]
-            internal List<ActivationAddress> _cacheInvalidationHeader;
+            public List<ActivationAddress> _cacheInvalidationHeader;
             [Hagar.Id(22)]
-            internal RejectionTypes _rejectionType;
+            public RejectionTypes _rejectionType;
             [Hagar.Id(23)]
-            internal string _rejectionInfo;
+            public string _rejectionInfo;
             [Hagar.Id(24)]
-            internal Dictionary<string, object> _requestContextData;
+            public Dictionary<string, object> _requestContextData;
             [Hagar.Id(25)]
-            internal CorrelationId _callChainId;
+            public CorrelationId _callChainId;
             [Hagar.Id(26)]
-            internal readonly DateTime _localCreationTime;
+            public readonly DateTime _localCreationTime;
             [Hagar.Id(27)]
-            internal TraceContext _traceContext;
+            public TraceContext _traceContext;
             [Hagar.Id(28)]
-            internal GrainInterfaceType interfaceType;
+            public GrainInterfaceType interfaceType;
 
             public HeadersContainer()
             {
