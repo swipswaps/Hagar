@@ -35,11 +35,13 @@ namespace Hagar.Codecs
                     address = IPAddressCodec.ReadValue(ref reader, header);
                     id = HagarGeneratedCodeHelper.ReadHeader(ref reader, ref header, id);
                 }
+
                 if (id == 2)
                 {
                     port = UInt16Codec.ReadValue(ref reader, header);
                     id = HagarGeneratedCodeHelper.ReadHeaderExpectingEndBaseOrEndObject(ref reader, ref header, id);
                 }
+
                 if (id != -1)
                 {
                     reader.ConsumeUnknownField(header);
